@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentcheck.alternatives.models import WastefulnessResult
+from agentcheck.shared.models import WastefulnessResult
 from agentcheck.efficiency import run_efficiency
 
 

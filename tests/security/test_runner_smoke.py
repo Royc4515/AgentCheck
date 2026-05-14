@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from agentcheck.alternatives.models import SecurityResult
+from agentcheck.shared.models import SecurityResult
 from agentcheck.security import run_security
 
 

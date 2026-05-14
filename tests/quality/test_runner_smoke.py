@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from agentcheck.alternatives.models import ReliabilityResult
+from agentcheck.shared.models import ReliabilityResult
 from agentcheck.quality import run_quality
 
 

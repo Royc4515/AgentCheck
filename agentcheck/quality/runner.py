@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from agentcheck.alternatives.models import ReliabilityResult
+from agentcheck.shared.models import ReliabilityResult
 from agentcheck.shared import OpenRouterClient, ensure_results_dir, write_json
 from agentcheck.shared.openrouter_client import OpenRouterError
 

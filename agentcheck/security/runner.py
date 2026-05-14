@@ -13,7 +13,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agentcheck.alternatives.models import SecurityResult
+from agentcheck.shared.models import SecurityResult
 from agentcheck.shared import ensure_results_dir, write_json
 
 from .auditor import audit_source

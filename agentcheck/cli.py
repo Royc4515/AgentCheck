@@ -86,7 +86,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        if args.agent_path is None and not args.only and "alternatives" not in args.only:
+        # If the user gave no agent path and didn't constrain --only / --skip,
+        # default to running Part 4 against cached JSONs. An explicit
+        # `--skip alternatives` (or `--only <something else>`) is honored.
+        if (
+            args.agent_path is None
+            and not args.only
+            and "alternatives" not in args.skip
+        ):
             args.only = {"alternatives"}
         run_pipeline(
             agent_path=args.agent_path,

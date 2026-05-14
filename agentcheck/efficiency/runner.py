@@ -12,7 +12,7 @@ from typing import Optional
 
 import yaml
 
-from agentcheck.alternatives.models import WastefulnessResult
+from agentcheck.shared.models import WastefulnessResult
 from agentcheck.shared import ensure_results_dir, write_json
 
 from .analyzer import (
