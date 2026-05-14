@@ -1,9 +1,10 @@
 """Sample target agent used to demo AgentCheck.
 
-This agent calls OpenRouter directly via the requests module — no openai
-SDK required. The API key is read from the OPENROUTER_API_KEY env var.
-If the key is missing, the agent falls back to a deterministic stub so
-AgentCheck can still be demoed offline.
+This agent calls Groq directly via the requests module — no openai SDK
+required. The API key is read from the GROQ_API_KEY env var (with
+OPENROUTER_API_KEY as a legacy fallback). If no key is available the
+agent falls back to a deterministic stub so AgentCheck can still be
+demoed offline.
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ from typing import Any
 
 import requests
 
-_ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
-_MODEL = "anthropic/claude-haiku-4-5-20251001"
+_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
+_MODEL = "llama-3.3-70b-versatile"
 _SYSTEM = (
     "You are a professional travel planner. "
     "Provide a short structured itinerary. "
@@ -24,7 +25,10 @@ _SYSTEM = (
 
 def travel_planner_agent(prompt: str) -> str:
     """Plan a short trip for the given prompt."""
-    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    api_key = (
+        os.environ.get("GROQ_API_KEY", "")
+        or os.environ.get("OPENROUTER_API_KEY", "")
+    )
     if not api_key:
         return (
             f"Itinerary for {prompt}:\n"
@@ -46,8 +50,6 @@ def travel_planner_agent(prompt: str) -> str:
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/royc4515/agentcheck",
-            "X-Title": "AgentCheck demo",
         },
         json=payload,
         timeout=30,
