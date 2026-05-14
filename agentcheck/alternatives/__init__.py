@@ -20,6 +20,7 @@ from .models import (
 )
 from .profile_loader import AgentProfileLoader, CheckResultNotFound
 from .reporter import AlternativesReporter
+from .check_runner import CheckRunner, RealCheckRunner, StubCheckRunner
 from .validation import (
     BatteryRunner,
     FairnessGuard,
@@ -29,6 +30,9 @@ from .validation import (
 )
 
 __all__ = [
+    "CheckRunner",
+    "RealCheckRunner",
+    "StubCheckRunner",
     "AgentProfile",
     "AgentProfileLoader",
     "AlternativeCandidate",

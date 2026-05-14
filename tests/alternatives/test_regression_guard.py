@@ -12,12 +12,12 @@ from agentcheck.alternatives import (
     MatchingEngine,
     RecommendationType,
     ReliabilityResult,
+    StubCheckRunner,
     ValidationPipeline,
     ValidationStatus,
     WastefulnessResult,
 )
 from agentcheck.alternatives.matching_engine import DominanceChecker
-from agentcheck.alternatives.validation import BatteryRunner
 
 
 @pytest.fixture()
@@ -148,12 +148,12 @@ class TestRegressionGuard:
         dummy_agent.write_text("def run(user_input): return user_input", encoding="utf-8")
         mock_generator.generate.return_value = dummy_agent
 
-        mock_runner = MagicMock(spec=BatteryRunner)
-        mock_runner.run.return_value = (0.55, 0.010)  # reliability crash
+        # Original: 80% reliability. Stub returns 55% → -31% → blocked.
+        stub = StubCheckRunner(task_completion_rate=0.55, cost_per_task_usd=0.010)
 
         pipeline = ValidationPipeline(
             generator=mock_generator,
-            runner=mock_runner,
+            runner=stub,
             output_dir=tmp_path,
         )
         dummy_tasks = tmp_path / "tasks.yaml"
@@ -179,12 +179,12 @@ class TestRegressionGuard:
         dummy_agent.write_text("def run(user_input): return user_input", encoding="utf-8")
         mock_generator.generate.return_value = dummy_agent
 
-        mock_runner = MagicMock(spec=BatteryRunner)
-        mock_runner.run.return_value = (0.85, 0.010)  # reliability improves, cost drops 80 %
+        # Reliability improves to 85% (+5pp ✓), cost drops to $0.010 (-80% ✓)
+        stub = StubCheckRunner(task_completion_rate=0.85, cost_per_task_usd=0.010)
 
         pipeline = ValidationPipeline(
             generator=mock_generator,
-            runner=mock_runner,
+            runner=stub,
             output_dir=tmp_path,
         )
         dummy_tasks = tmp_path / "tasks.yaml"

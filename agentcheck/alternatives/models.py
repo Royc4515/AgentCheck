@@ -249,6 +249,8 @@ class FullComparisonReport(BaseModel):
     agent_profile: AgentProfile
     # Always the top 3 (or fewer if KB has fewer qualifying candidates)
     comparisons: list[CandidateComparison] = Field(default_factory=list)
+    # Populated only in empirical mode (--validate-alternative)
+    validation_results: list[ValidationResult] = Field(default_factory=list)
 
     kb_snapshot_date: str = ""
     total_candidates_evaluated: int = 0
