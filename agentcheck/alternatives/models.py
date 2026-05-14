@@ -188,10 +188,16 @@ class AlternativeMetrics(BaseModel):
 
 
 class DominanceResult(BaseModel):
-    """Outcome of the dominance check for a single candidate."""
+    """Fitness assessment for a single KB candidate vs the current agent.
+
+    'recommended' is True when the candidate improves at least one axis
+    without regressing any other by more than 15 %.  Even when recommended
+    is False the result is still surfaced — the report frames all candidates
+    as "alternatives worth knowing about" with explicit trade-offs.
+    """
 
     candidate_id: str
-    dominates: bool
+    recommended: bool  # True = clears the dominance bar
 
     # Per-axis delta as a signed percentage (positive = improvement)
     reliability_delta_pct: Optional[float] = None
@@ -199,10 +205,23 @@ class DominanceResult(BaseModel):
     complexity_delta_pct: Optional[float] = None
     security_delta_pct: Optional[float] = None
 
-    winning_axes: list[str] = Field(default_factory=list)
-    regressed_axes: list[str] = Field(default_factory=list)
+    better_on: list[str] = Field(default_factory=list)   # axes where alt is better
+    worse_on: list[str] = Field(default_factory=list)    # axes where alt is worse
 
-    reason: str = ""
+    trade_off_summary: str = ""
+
+    # Keep 'dominates' as a read-only alias so existing tests don't break
+    @property
+    def dominates(self) -> bool:
+        return self.recommended
+
+    @property
+    def winning_axes(self) -> list[str]:
+        return self.better_on
+
+    @property
+    def regressed_axes(self) -> list[str]:
+        return self.worse_on
 
 
 class AlternativeCandidate(BaseModel):
@@ -217,6 +236,11 @@ class AlternativeCandidate(BaseModel):
     dominance: Optional[DominanceResult] = None
 
     freshness_score: float = Field(default=1.0, ge=0.0, le=1.0)
+
+    # Human-readable pros/cons from the KB YAML
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+
     code_example: Optional[str] = None
     evidence_url: Optional[str] = None
 

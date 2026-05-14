@@ -79,6 +79,8 @@ def load_kb() -> list[AlternativeCandidate]:
             description=str(raw.get("description", "")),
             kb_metrics=_metrics_from(raw),
             freshness_score=_freshness(str(raw.get("snapshot_date", ""))),
+            strengths=list(raw.get("strengths", [])),
+            weaknesses=list(raw.get("weaknesses", [])),
             code_example=_code_example(raw),
             evidence_url=raw.get("evidence_url"),
         )

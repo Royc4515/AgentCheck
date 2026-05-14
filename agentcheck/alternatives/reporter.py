@@ -3,7 +3,7 @@ from __future__ import annotations
 """Rich terminal reporter for check #4 — Alternatives.
 
 Three output modes:
-  terminal  — Rich-styled side-by-side comparison table (default)
+  terminal  — Rich-styled score panel + alternatives with pros/cons (default)
   json      — Machine-readable JSON dump
   summary   — Single-line verdict for CI pipelines
 """
@@ -23,6 +23,8 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
+    from rich.columns import Columns
+    from rich.text import Text
 
     _RICH_AVAILABLE = True
 except ImportError:
@@ -44,7 +46,7 @@ class AlternativesReporter:
         return self._render_terminal(report)
 
     # ------------------------------------------------------------------
-    # Terminal (Rich)
+    # Terminal
     # ------------------------------------------------------------------
 
     def _render_terminal(self, report: FullComparisonReport) -> str:
@@ -60,16 +62,7 @@ class AlternativesReporter:
         self._console.rule(style="cyan")
 
         self._print_overall_score(report)
-        self._print_profile(report)
-
-        if not report.comparisons:
-            self._console.print(
-                "[bold green]✓ No better alternative found.[/bold green]  "
-                "The KB has nothing that clears your bar — or your agent is already great."
-            )
-        else:
-            self._print_comparison_table(report)
-            self._print_top_detail(report.comparisons[0])
+        self._print_alternatives(report)
 
         self._console.print()
         self._console.print(
@@ -84,9 +77,7 @@ class AlternativesReporter:
         if s is None or s.overall_grade is None:
             return
 
-        grade_color = {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(
-            s.overall_grade.value, "white"
-        )
+        grade_color = _grade_color(s.overall_grade.value)
 
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
         table.add_column("Check", style="dim", min_width=14)
@@ -120,120 +111,99 @@ class AlternativesReporter:
 
         self._console.print(Panel(table, title="AgentCheck Score", border_style=grade_color))
 
-    def _print_profile(self, report: FullComparisonReport) -> None:
+    def _print_alternatives(self, report: FullComparisonReport) -> None:
         assert self._console is not None
-        p = report.agent_profile
-        lines = []
-        if p.framework:
-            lines.append(
-                f"Framework  : [bold]{p.framework}[/bold] "
-                f"(confidence {p.framework_confidence:.0%})"
-            )
-        if p.task_completion_rate is not None:
-            lines.append(
-                f"Reliability: [bold]{p.task_completion_rate:.0%}[/bold] task completion"
-            )
-        if p.cost_per_task_usd is not None:
-            lines.append(f"Cost/task  : [bold]${p.cost_per_task_usd:.4f}[/bold]")
-        if p.loc is not None:
-            lines.append(f"LOC        : [bold]{p.loc}[/bold]")
-        if p.security_finding_count is not None:
-            color = "red" if p.security_finding_count > 0 else "green"
-            lines.append(
-                f"Security   : [{color}]{p.security_finding_count} findings[/{color}]"
-            )
-        if lines:
+
+        if not report.comparisons:
             self._console.print(
-                Panel("\n".join(lines), title="Audited Agent", border_style="dim")
+                "\n[bold green]✓ No alternatives suggested.[/bold green]  "
+                "Your current setup fits the available KB data well."
             )
+            return
 
-    def _print_comparison_table(self, report: FullComparisonReport) -> None:
-        assert self._console is not None
-
-        table = Table(
-            title=f"Top {len(report.comparisons)} Alternatives",
-            show_header=True,
-            header_style="bold magenta",
+        self._console.print()
+        self._console.print(
+            f"[bold]Suggested Alternatives[/bold] "
+            f"[dim](based on KB data — not empirically verified)[/dim]"
         )
-        table.add_column("Metric", style="dim", min_width=14)
-        table.add_column("Current", justify="right", min_width=12)
+        self._console.print()
 
-        for comp in report.comparisons:
-            label = f"[bold]{comp.candidate.name}[/bold]"
-            if comp.candidate.dominance and comp.candidate.dominance.dominates:
-                label += " [green]✓[/green]"
-            table.add_column(label, justify="right", min_width=16)
+        for i, comp in enumerate(report.comparisons, 1):
+            self._print_candidate_card(i, comp)
 
-        # Reliability row
-        table.add_row(
-            "Reliability",
-            _fmt_pct(report.comparisons[0].original_reliability if report.comparisons else None),
-            *[_fmt_pct(c.alt_reliability) for c in report.comparisons],
-        )
-
-        # Cost row
-        table.add_row(
-            "Cost / task",
-            _fmt_usd(report.comparisons[0].original_cost if report.comparisons else None),
-            *[_fmt_usd(c.alt_cost) for c in report.comparisons],
-        )
-
-        # LOC row
-        table.add_row(
-            "LOC",
-            _fmt_int(report.comparisons[0].original_loc if report.comparisons else None),
-            *[_fmt_int(c.alt_loc) for c in report.comparisons],
-        )
-
-        # Security row
-        table.add_row(
-            "Sec findings",
-            _fmt_int(
-                report.comparisons[0].original_security_findings
-                if report.comparisons
-                else None,
-                lower_is_better=True,
-            ),
-            *[
-                _fmt_int(c.alt_security_findings, lower_is_better=True)
-                for c in report.comparisons
-            ],
-        )
-
-        # Verdict row
-        table.add_row(
-            "Verdict",
-            "[dim]current[/dim]",
-            *[_fmt_verdict(c) for c in report.comparisons],
-        )
-
-        self._console.print(table)
-
-    def _print_top_detail(self, comp: CandidateComparison) -> None:
+    def _print_candidate_card(self, rank: int, comp: CandidateComparison) -> None:
         assert self._console is not None
         c = comp.candidate
-        lines = [f"[bold]{c.name}[/bold]  ({_fmt_type(c.recommendation_type)})"]
+        d = c.dominance
 
+        # Header line
+        rec_label = ""
+        border = "dim"
+        if d and d.recommended:
+            rec_label = "  [green]✓ Recommended[/green]"
+            border = "green"
+        elif d and d.worse_on:
+            rec_label = f"  [yellow]⚠ Trade-offs on {', '.join(d.worse_on)}[/yellow]"
+            border = "yellow"
+
+        lines: list[str] = []
+
+        # Type badge
+        lines.append(f"[dim]{_fmt_type(c.recommendation_type)}[/dim]{rec_label}")
+        lines.append("")
+
+        # Description
         if c.description:
+            lines.append(c.description.strip()[:200])
             lines.append("")
-            lines.append(c.description[:300])
 
-        if c.dominance:
+        # Trade-off summary from matching engine
+        if d and d.trade_off_summary:
+            lines.append(f"[italic]{d.trade_off_summary}[/italic]")
             lines.append("")
-            lines.append(f"[italic]{c.dominance.reason}[/italic]")
 
+        # Pros
+        if c.strengths:
+            lines.append("[green]Strengths[/green]")
+            for s in c.strengths[:4]:
+                lines.append(f"  [green]+[/green] {s}")
+            lines.append("")
+
+        # Cons
+        if c.weaknesses:
+            lines.append("[red]Weaknesses[/red]")
+            for w in c.weaknesses[:3]:
+                lines.append(f"  [red]−[/red] {w}")
+            lines.append("")
+
+        # Key metrics (KB-sourced)
+        metrics_parts = []
+        if comp.alt_reliability is not None:
+            metrics_parts.append(f"Reliability {comp.alt_reliability:.0%}")
+        if comp.alt_cost is not None:
+            metrics_parts.append(f"Cost ${comp.alt_cost:.4f}/task")
+        if comp.alt_loc is not None:
+            metrics_parts.append(f"~{comp.alt_loc} LOC")
+        if metrics_parts:
+            lines.append(f"[dim]KB data: {' · '.join(metrics_parts)}[/dim]")
+
+        # Code example
         if c.code_example:
             lines.append("")
-            lines.append("[bold]Suggested replacement:[/bold]")
+            lines.append("[bold]Example:[/bold]")
             lines.append(f"[green]{c.code_example}[/green]")
 
+        # Evidence link
         if c.evidence_url:
             lines.append("")
-            lines.append(f"[dim]Evidence: {c.evidence_url}[/dim]")
+            lines.append(f"[dim]{c.evidence_url}[/dim]")
 
-        border = "green" if (c.dominance and c.dominance.dominates) else "yellow"
         self._console.print(
-            Panel("\n".join(lines), title="Top Recommendation", border_style=border)
+            Panel(
+                "\n".join(lines),
+                title=f"#{rank}  {c.name}",
+                border_style=border,
+            )
         )
 
     # ------------------------------------------------------------------
@@ -244,55 +214,38 @@ class AlternativesReporter:
         return report.model_dump_json(indent=2)
 
     # ------------------------------------------------------------------
-    # Summary
+    # Summary (CI-friendly)
     # ------------------------------------------------------------------
 
     def _render_summary(self, report: FullComparisonReport) -> str:
-        top = report.top_recommendation
-        if top is None:
-            return "AgentCheck v0.4: no actionable alternative found."
-        axis = top.dominance.winning_axes[0] if top.dominance else "?"
-        reason = top.dominance.reason if top.dominance else ""
-        return f"AgentCheck v0.4: switch to {top.name} ({axis} improvement). {reason}"
+        grade = report.overall_score.overall_grade.value if (
+            report.overall_score and report.overall_score.overall_grade
+        ) else "?"
+
+        if not report.comparisons:
+            return f"AgentCheck v0.4: Overall {grade}. No alternatives suggested."
+
+        names = [c.candidate.name for c in report.comparisons]
+        return (
+            f"AgentCheck v0.4: Overall {grade}. "
+            f"Suggested alternatives: {', '.join(names)}."
+        )
 
 
 # ---------------------------------------------------------------------------
-# Formatting helpers
+# Helpers
 # ---------------------------------------------------------------------------
 
-def _fmt_pct(v: Optional[float]) -> str:
-    return f"{v:.0%}" if v is not None else "[dim]n/a[/dim]"
-
-
-def _fmt_usd(v: Optional[float]) -> str:
-    return f"${v:.4f}" if v is not None else "[dim]n/a[/dim]"
-
-
-def _fmt_int(v: Optional[int], lower_is_better: bool = False) -> str:
-    if v is None:
-        return "[dim]n/a[/dim]"
-    return str(v)
-
-
-def _fmt_verdict(comp: CandidateComparison) -> str:
-    d = comp.candidate.dominance
-    if d is None:
-        return "[dim]not evaluated[/dim]"
-    if d.dominates:
-        axes = ", ".join(d.winning_axes)
-        return f"[green]✓ wins on {axes}[/green]"
-    if d.regressed_axes:
-        axes = ", ".join(d.regressed_axes)
-        return f"[red]✗ regresses {axes}[/red]"
-    return "[yellow]~ no clear win[/yellow]"
+def _grade_color(grade: str) -> str:
+    return {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(
+        grade, "white"
+    )
 
 
 def _grade_badge(grade) -> str:
     if grade is None:
         return "[dim]n/a[/dim]"
-    color = {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(
-        grade.value, "white"
-    )
+    color = _grade_color(grade.value)
     return f"[{color}]{grade.value}[/{color}]"
 
 

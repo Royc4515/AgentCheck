@@ -109,33 +109,34 @@ class DominanceChecker:
                 regressed_axes.append("security")
                 security_delta = -100.0
 
-        dominates = len(winning_axes) > 0 and len(regressed_axes) == 0
+        recommended = len(winning_axes) > 0 and len(regressed_axes) == 0
 
         return DominanceResult(
             candidate_id=candidate.id,
-            dominates=dominates,
+            recommended=recommended,
             reliability_delta_pct=reliability_delta,
             cost_delta_pct=cost_delta,
             complexity_delta_pct=complexity_delta,
             security_delta_pct=security_delta,
-            winning_axes=winning_axes,
-            regressed_axes=regressed_axes,
-            reason=_build_reason(dominates, winning_axes, regressed_axes),
+            better_on=winning_axes,
+            worse_on=regressed_axes,
+            trade_off_summary=_trade_off_summary(recommended, winning_axes, regressed_axes),
         )
 
 
-def _build_reason(
-    dominates: bool,
-    winning: list[str],
-    regressed: list[str],
+def _trade_off_summary(
+    recommended: bool,
+    better_on: list[str],
+    worse_on: list[str],
 ) -> str:
-    if dominates:
-        axes = " and ".join(winning)
-        return f"Dominates on {axes} with no regressions."
-    if regressed:
-        axes = " and ".join(regressed)
-        return f"Blocked by regression guard: {axes} regresses > 15 %."
-    return "No axis clears the improvement threshold."
+    parts: list[str] = []
+    if better_on:
+        parts.append(f"Better on: {', '.join(better_on)}.")
+    if worse_on:
+        parts.append(f"Watch out for: {', '.join(worse_on)}.")
+    if not parts:
+        parts.append("No significant difference on measured axes.")
+    return " ".join(parts)
 
 
 class MatchingEngine:
