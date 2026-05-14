@@ -1,2 +1,8 @@
 # 1. Secrets 
 .env
+
+# 2. Virtual Environments
+.venv/
+env/
+venv/
+ENV/
