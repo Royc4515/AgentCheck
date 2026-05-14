@@ -1,2 +1,4 @@
 tiktoken
 pyyaml
+openai
+python-dotenv

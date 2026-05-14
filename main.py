@@ -5,10 +5,10 @@ from sandbox_runner import run_sandbox
 
 # Imports from your modules
 from dummy_agents import wasteful_agent, efficient_agent 
-from analyzer import estimate_cost, analyze_tool_calls, analyze_heuristic_baseline
+from analyzer import estimate_cost, analyze_tool_calls, analyze_llm_baseline
 from downgrade_tester import run_downgrade_test, get_cheaper_model, mock_judge_evaluation
 from reporter import print_terminal_report
-from usage_tracker import log_model_usage # הגשש החדש שבנינו
+from usage_tracker import log_model_usage
 
 # ==========================================
 # 1. AGENT REGISTRY
@@ -26,7 +26,7 @@ AGENTS = {
 def start_audit(agent_name, task_prompt, user_id="user_8821", model="gpt-4o-mini"):
     """
     Orchestrates the entire AgentCheck suite.
-    Now includes automated usage tracking per user/model.
+    Includes automated usage tracking and LLM-as-a-Judge baseline.
     """
     if agent_name not in AGENTS:
         print(f"Error: Agent '{agent_name}' not found.")
@@ -37,10 +37,8 @@ def start_audit(agent_name, task_prompt, user_id="user_8821", model="gpt-4o-mini
     print(f"🚀 Starting Audit for: [{agent_name}]...")
     
     # === STEP 0: LISTEN & LOG USAGE ===
-    # מתעד מי המשתמש ובאיזה מודל הוא השתמש עבור האנליטיקה
     log_model_usage(user_id, model)
-    # ==================================
-
+    
     # 1. RUN: Execute the agent logic
     log = run_sandbox(agent_func, task_prompt, model_name=model)
     
@@ -55,7 +53,9 @@ def start_audit(agent_name, task_prompt, user_id="user_8821", model="gpt-4o-mini
     # 3. ANALYZE: Calculate all metrics
     actual_cost, actual_tokens = estimate_cost(log, pricing)
     tool_penalty_pts, redundant_tools = analyze_tool_calls(log)
-    baseline_tokens, is_bloated = analyze_heuristic_baseline(log, actual_tokens)
+    
+    # --- HERE IS THE NEW JUDGE! ---
+    baseline_tokens, is_bloated = analyze_llm_baseline(task_prompt, actual_tokens)
     
     # Real-world baseline cost calculation (includes expected output tokens)
     mini_pricing = pricing["models"]["gpt-4o-mini"]
@@ -96,15 +96,12 @@ def start_audit(agent_name, task_prompt, user_id="user_8821", model="gpt-4o-mini
 # 3. EXECUTION BLOCK
 # ==========================================
 if __name__ == "__main__":
-    # Parameters can be passed via command line
-    # Usage: py main.py <agent_name>
     agent_to_test = "wasteful" 
-    current_user = "user_8821" # Simulated logged-in user
+    current_user = "user_8821" 
     
     if len(sys.argv) > 1:
         agent_to_test = sys.argv[1]
     
     query = "I need a summary of the latest 5 orders for customer #8821"
     
-    # Fire up the engine
     start_audit(agent_to_test, query, user_id=current_user)

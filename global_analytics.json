@@ -1,8 +1,8 @@
 {
     "user_8821": {
-        "total_calls": 1,
+        "total_calls": 6,
         "models": {
-            "gpt-4o-mini": 1
+            "gpt-4o-mini": 6
         }
     }
 }
