@@ -1,26 +1,28 @@
 from __future__ import annotations
 
-"""Rich terminal reporter for the Alternatives check.
+"""Rich terminal reporter for check #4 — Alternatives.
 
-Three output modes (from SDD v0.4 §5 M21):
-  1. terminal  — Rich-styled tables and panels (default)
-  2. json      — Machine-readable JSON dump
-  3. summary   — Single-line verdict for CI pipelines
+Three output modes:
+  terminal  — Rich-styled side-by-side comparison table (default)
+  json      — Machine-readable JSON dump
+  summary   — Single-line verdict for CI pipelines
 """
 
-import json
-from typing import Literal
+from typing import Literal, Optional
 
-from .models import AlternativeCandidate, AlternativesReport, RecommendationType
+from .models import (
+    AlternativeCandidate,
+    CandidateComparison,
+    FullComparisonReport,
+    RecommendationType,
+)
 
 OutputMode = Literal["terminal", "json", "summary"]
 
-# Lazy-import Rich so the module is importable in envs without it installed
 try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
-    from rich import print as rprint
 
     _RICH_AVAILABLE = True
 except ImportError:
@@ -28,13 +30,13 @@ except ImportError:
 
 
 class AlternativesReporter:
-    """Renders an AlternativesReport to the requested output mode."""
+    """Renders a FullComparisonReport to the requested output mode."""
 
     def __init__(self, mode: OutputMode = "terminal") -> None:
         self._mode = mode
         self._console = Console() if _RICH_AVAILABLE else None
 
-    def render(self, report: AlternativesReport) -> str:
+    def render(self, report: FullComparisonReport) -> str:
         if self._mode == "json":
             return self._render_json(report)
         if self._mode == "summary":
@@ -45,162 +47,208 @@ class AlternativesReporter:
     # Terminal (Rich)
     # ------------------------------------------------------------------
 
-    def _render_terminal(self, report: AlternativesReport) -> str:
+    def _render_terminal(self, report: FullComparisonReport) -> str:
         if not _RICH_AVAILABLE:
             return self._render_summary(report)
 
         assert self._console is not None
-        lines: list[str] = []
-
         self._console.print()
         self._console.print(
             "[bold cyan]AgentCheck v0.4[/bold cyan] — "
-            "[italic]Does a better agent exist? Let's find out.[/italic]"
+            "[italic]Does a better agent exist?[/italic]"
         )
         self._console.rule(style="cyan")
 
-        # Agent profile summary
-        p = report.agent_profile
-        profile_lines = []
-        if p.framework:
-            profile_lines.append(f"Framework : [bold]{p.framework}[/bold] (confidence {p.framework_confidence:.0%})")
-        if p.task_completion_rate is not None:
-            profile_lines.append(f"Reliability : [bold]{p.task_completion_rate:.0%}[/bold] task completion")
-        if p.cost_per_task_usd is not None:
-            profile_lines.append(f"Cost/task : [bold]${p.cost_per_task_usd:.4f}[/bold]")
-        if p.loc is not None:
-            profile_lines.append(f"LOC : [bold]{p.loc}[/bold]")
+        self._print_profile(report)
 
-        if profile_lines:
-            self._console.print(Panel("\n".join(profile_lines), title="Audited Agent", border_style="dim"))
-
-        # Recommendations table
-        actionable = [c for c in report.ranked_candidates if c.dominance and c.dominance.dominates]
-        non_actionable = [c for c in report.ranked_candidates if not (c.dominance and c.dominance.dominates)]
-
-        if not actionable:
+        if not report.comparisons:
             self._console.print(
                 "[bold green]✓ No better alternative found.[/bold green]  "
-                "Your current setup wins on its own terms — or the KB didn't have enough data."
+                "The KB has nothing that clears your bar — or your agent is already great."
             )
         else:
-            table = Table(
-                title=f"Recommendations ({len(actionable)} actionable)",
-                show_header=True,
-                header_style="bold magenta",
-            )
-            table.add_column("Rank", style="dim", width=5)
-            table.add_column("Alternative", min_width=22)
-            table.add_column("Type", min_width=18)
-            table.add_column("Cost Δ", justify="right", min_width=10)
-            table.add_column("Reliability Δ", justify="right", min_width=14)
-            table.add_column("Complexity Δ", justify="right", min_width=13)
-            table.add_column("Verdict")
+            self._print_comparison_table(report)
+            self._print_top_detail(report.comparisons[0])
 
-            for i, c in enumerate(actionable, 1):
-                d = c.dominance
-                assert d is not None
-                table.add_row(
-                    str(i),
-                    c.name,
-                    _fmt_type(c.recommendation_type),
-                    _fmt_delta(d.cost_delta_pct, invert=False),
-                    _fmt_delta(d.reliability_delta_pct),
-                    _fmt_delta(d.complexity_delta_pct),
-                    "[green]✓ Dominates[/green]",
-                )
-
-            self._console.print(table)
-
-            top = actionable[0]
-            self._console.print()
-            self._console.print(_candidate_detail_panel(top))
-
-        # Validation results
-        if report.validation_results:
-            self._console.print()
-            self._console.rule("Empirical Validation", style="yellow")
-            for vr in report.validation_results:
-                color = {"passed": "green", "failed": "red", "error": "red"}.get(vr.status.value, "yellow")
-                self._console.print(
-                    f"  [{color}]{vr.status.value.upper()}[/{color}]  "
-                    f"[bold]{vr.candidate_id}[/bold]  "
-                    + (f"— confirmed dominates: {vr.confirmed_dominates}" if vr.confirmed_dominates is not None else "")
-                    + (f"\n  [red]{vr.error_message}[/red]" if vr.error_message else "")
-                )
-
-        # KB metadata footer
         self._console.print()
         self._console.print(
-            f"[dim]KB snapshot: {report.kb_snapshot_date or 'unknown'} · "
+            f"[dim]KB snapshot: {report.kb_snapshot_date} · "
             f"Candidates evaluated: {report.total_candidates_evaluated}[/dim]"
         )
+        return ""
 
-        return ""  # console.print() side-effects; return empty for capture
+    def _print_profile(self, report: FullComparisonReport) -> None:
+        assert self._console is not None
+        p = report.agent_profile
+        lines = []
+        if p.framework:
+            lines.append(
+                f"Framework  : [bold]{p.framework}[/bold] "
+                f"(confidence {p.framework_confidence:.0%})"
+            )
+        if p.task_completion_rate is not None:
+            lines.append(
+                f"Reliability: [bold]{p.task_completion_rate:.0%}[/bold] task completion"
+            )
+        if p.cost_per_task_usd is not None:
+            lines.append(f"Cost/task  : [bold]${p.cost_per_task_usd:.4f}[/bold]")
+        if p.loc is not None:
+            lines.append(f"LOC        : [bold]{p.loc}[/bold]")
+        if p.security_finding_count is not None:
+            color = "red" if p.security_finding_count > 0 else "green"
+            lines.append(
+                f"Security   : [{color}]{p.security_finding_count} findings[/{color}]"
+            )
+        if lines:
+            self._console.print(
+                Panel("\n".join(lines), title="Audited Agent", border_style="dim")
+            )
+
+    def _print_comparison_table(self, report: FullComparisonReport) -> None:
+        assert self._console is not None
+
+        table = Table(
+            title=f"Top {len(report.comparisons)} Alternatives",
+            show_header=True,
+            header_style="bold magenta",
+        )
+        table.add_column("Metric", style="dim", min_width=14)
+        table.add_column("Current", justify="right", min_width=12)
+
+        for comp in report.comparisons:
+            label = f"[bold]{comp.candidate.name}[/bold]"
+            if comp.candidate.dominance and comp.candidate.dominance.dominates:
+                label += " [green]✓[/green]"
+            table.add_column(label, justify="right", min_width=16)
+
+        # Reliability row
+        table.add_row(
+            "Reliability",
+            _fmt_pct(report.comparisons[0].original_reliability if report.comparisons else None),
+            *[_fmt_pct(c.alt_reliability) for c in report.comparisons],
+        )
+
+        # Cost row
+        table.add_row(
+            "Cost / task",
+            _fmt_usd(report.comparisons[0].original_cost if report.comparisons else None),
+            *[_fmt_usd(c.alt_cost) for c in report.comparisons],
+        )
+
+        # LOC row
+        table.add_row(
+            "LOC",
+            _fmt_int(report.comparisons[0].original_loc if report.comparisons else None),
+            *[_fmt_int(c.alt_loc) for c in report.comparisons],
+        )
+
+        # Security row
+        table.add_row(
+            "Sec findings",
+            _fmt_int(
+                report.comparisons[0].original_security_findings
+                if report.comparisons
+                else None,
+                lower_is_better=True,
+            ),
+            *[
+                _fmt_int(c.alt_security_findings, lower_is_better=True)
+                for c in report.comparisons
+            ],
+        )
+
+        # Verdict row
+        table.add_row(
+            "Verdict",
+            "[dim]current[/dim]",
+            *[_fmt_verdict(c) for c in report.comparisons],
+        )
+
+        self._console.print(table)
+
+    def _print_top_detail(self, comp: CandidateComparison) -> None:
+        assert self._console is not None
+        c = comp.candidate
+        lines = [f"[bold]{c.name}[/bold]  ({_fmt_type(c.recommendation_type)})"]
+
+        if c.description:
+            lines.append("")
+            lines.append(c.description[:300])
+
+        if c.dominance:
+            lines.append("")
+            lines.append(f"[italic]{c.dominance.reason}[/italic]")
+
+        if c.code_example:
+            lines.append("")
+            lines.append("[bold]Suggested replacement:[/bold]")
+            lines.append(f"[green]{c.code_example}[/green]")
+
+        if c.evidence_url:
+            lines.append("")
+            lines.append(f"[dim]Evidence: {c.evidence_url}[/dim]")
+
+        border = "green" if (c.dominance and c.dominance.dominates) else "yellow"
+        self._console.print(
+            Panel("\n".join(lines), title="Top Recommendation", border_style=border)
+        )
 
     # ------------------------------------------------------------------
     # JSON
     # ------------------------------------------------------------------
 
-    def _render_json(self, report: AlternativesReport) -> str:
+    def _render_json(self, report: FullComparisonReport) -> str:
         return report.model_dump_json(indent=2)
 
     # ------------------------------------------------------------------
-    # Summary (CI-friendly single line)
+    # Summary
     # ------------------------------------------------------------------
 
-    def _render_summary(self, report: AlternativesReport) -> str:
+    def _render_summary(self, report: FullComparisonReport) -> str:
         top = report.top_recommendation
         if top is None:
             return "AgentCheck v0.4: no actionable alternative found."
-        return (
-            f"AgentCheck v0.4: switch to {top.name} "
-            f"({top.dominance.winning_axes[0] if top.dominance else '?'} improvement). "
-            f"{top.dominance.reason if top.dominance else ''}"
-        )
+        axis = top.dominance.winning_axes[0] if top.dominance else "?"
+        reason = top.dominance.reason if top.dominance else ""
+        return f"AgentCheck v0.4: switch to {top.name} ({axis} improvement). {reason}"
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Formatting helpers
 # ---------------------------------------------------------------------------
+
+def _fmt_pct(v: Optional[float]) -> str:
+    return f"{v:.0%}" if v is not None else "[dim]n/a[/dim]"
+
+
+def _fmt_usd(v: Optional[float]) -> str:
+    return f"${v:.4f}" if v is not None else "[dim]n/a[/dim]"
+
+
+def _fmt_int(v: Optional[int], lower_is_better: bool = False) -> str:
+    if v is None:
+        return "[dim]n/a[/dim]"
+    return str(v)
+
+
+def _fmt_verdict(comp: CandidateComparison) -> str:
+    d = comp.candidate.dominance
+    if d is None:
+        return "[dim]not evaluated[/dim]"
+    if d.dominates:
+        axes = ", ".join(d.winning_axes)
+        return f"[green]✓ wins on {axes}[/green]"
+    if d.regressed_axes:
+        axes = ", ".join(d.regressed_axes)
+        return f"[red]✗ regresses {axes}[/red]"
+    return "[yellow]~ no clear win[/yellow]"
+
 
 def _fmt_type(rec_type: RecommendationType) -> str:
-    labels = {
+    return {
         RecommendationType.FRAMEWORK_SHIFT: "Framework Shift",
         RecommendationType.PATTERN_SHIFT: "Pattern Shift",
         RecommendationType.ARCHITECTURAL_SHIFT: "Architectural Shift",
         RecommendationType.MODEL_DOWNGRADE: "Model Downgrade",
         RecommendationType.DELETE_THE_LLM: "Delete the LLM",
-    }
-    return labels.get(rec_type, rec_type.value)
-
-
-def _fmt_delta(value: float | None, invert: bool = True) -> str:
-    """Format a percentage delta.  Green if positive (better), red if negative."""
-    if value is None:
-        return "[dim]n/a[/dim]"
-    sign = "+" if value >= 0 else ""
-    color = "green" if value >= 0 else "red"
-    return f"[{color}]{sign}{value:.1f} %[/{color}]"
-
-
-def _candidate_detail_panel(candidate: AlternativeCandidate) -> "Panel":
-    from rich.panel import Panel  # type: ignore[import]
-
-    lines = [f"[bold]{candidate.name}[/bold]  ({_fmt_type(candidate.recommendation_type)})"]
-    if candidate.description:
-        lines.append("")
-        lines.append(candidate.description[:300])
-    if candidate.dominance:
-        d = candidate.dominance
-        lines.append("")
-        lines.append(f"[italic]{d.reason}[/italic]")
-    if candidate.code_example:
-        lines.append("")
-        lines.append("[bold]Suggested replacement:[/bold]")
-        lines.append(f"[green]{candidate.code_example}[/green]")
-    if candidate.evidence_url:
-        lines.append("")
-        lines.append(f"[dim]Evidence: {candidate.evidence_url}[/dim]")
-
-    return Panel("\n".join(lines), title="Top Recommendation", border_style="green")
+    }.get(rec_type, rec_type.value)

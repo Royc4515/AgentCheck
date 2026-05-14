@@ -1,13 +1,4 @@
-"""Test #2 — Framework Shift: LangChain → PydanticAI.
-
-Scenario: a heavy LangChain agent with 180 LOC performing a simple
-structured extraction task.  PydanticAI accomplishes the same task in ~90
-LOC (50 % reduction, which clears the ≥40 % complexity threshold) at lower
-cost and higher reliability.  The MatchingEngine must:
-  - Rank PydanticAI above LangChain
-  - Report that complexity and reliability both win
-  - Not recommend LangChain to itself
-"""
+"""Test #2 — Framework Shift: LangChain → PydanticAI."""
 
 import pytest
 
@@ -18,6 +9,8 @@ from agentcheck.alternatives import (
     DetectedPattern,
     MatchingEngine,
     RecommendationType,
+    ReliabilityResult,
+    WastefulnessResult,
 )
 
 
@@ -28,11 +21,22 @@ def langchain_profile() -> AgentProfile:
         framework_confidence=0.94,
         model_id="gpt-4o",
         detected_patterns=[DetectedPattern.STRUCTURED_EXTRACTION],
-        task_completion_rate=0.72,
-        cost_per_task_usd=0.045,
-        loc=180,
-        cyclomatic_complexity=24,
-        waste_score=58.0,
+        reliability=ReliabilityResult(
+            task_completion_rate=0.72,
+            tasks_passed=7,
+            tasks_total=10,
+            framework="langchain",
+            framework_confidence=0.94,
+            model_id="gpt-4o",
+            detected_patterns=["structured_extraction"],
+            loc=180,
+            cyclomatic_complexity=24,
+        ),
+        wastefulness=WastefulnessResult(
+            waste_score=58.0,
+            cost_per_task_usd=0.045,
+            baseline_cost_usd=0.017,
+        ),
     )
 
 
@@ -48,6 +52,7 @@ def pydanticai_candidate() -> AlternativeCandidate:
             cost_per_task_usd=0.028,
             loc_estimate=90,
             cyclomatic_complexity=11,
+            security_finding_count=0,
         ),
         freshness_score=1.0,
     )
@@ -55,7 +60,6 @@ def pydanticai_candidate() -> AlternativeCandidate:
 
 @pytest.fixture()
 def langchain_candidate() -> AlternativeCandidate:
-    """Same framework as the agent — should be filtered out."""
     return AlternativeCandidate(
         id="langchain",
         name="LangChain",
@@ -66,6 +70,7 @@ def langchain_candidate() -> AlternativeCandidate:
             cost_per_task_usd=0.045,
             loc_estimate=180,
             cyclomatic_complexity=24,
+            security_finding_count=0,
         ),
         freshness_score=1.0,
     )
@@ -94,9 +99,8 @@ class TestFrameworkShift:
         ranked = engine.rank(langchain_profile)
 
         dominance = ranked[0].dominance
-        assert dominance is not None
-        # 180 → 90 LOC = 50 % reduction, must clear ≥ 40 % threshold
         assert "complexity" in dominance.winning_axes
+        # 180 → 90 = 50 % reduction, clears ≥ 40 %
         assert dominance.complexity_delta_pct is not None
         assert dominance.complexity_delta_pct >= 40.0
 
@@ -108,7 +112,7 @@ class TestFrameworkShift:
         engine = MatchingEngine(candidates=[langchain_candidate])
         ranked = engine.rank(langchain_profile)
 
-        assert ranked == [], "Must not recommend the agent's existing framework"
+        assert ranked == []
 
     def test_pydanticai_ranked_above_langchain_when_both_present(
         self,
@@ -119,7 +123,6 @@ class TestFrameworkShift:
         engine = MatchingEngine(candidates=[langchain_candidate, pydanticai_candidate])
         ranked = engine.rank(langchain_profile)
 
-        # LangChain filtered out; only PydanticAI should appear
         ids = [c.id for c in ranked]
         assert "langchain" not in ids
         assert "pydanticai" in ids
@@ -132,7 +135,5 @@ class TestFrameworkShift:
         engine = MatchingEngine(candidates=[pydanticai_candidate])
         ranked = engine.rank(langchain_profile)
 
-        dominance = ranked[0].dominance
-        assert dominance is not None
-        # $0.045 → $0.028 = 37.8 % cost reduction, clears ≥ 30 % threshold
-        assert "cost" in dominance.winning_axes
+        # $0.045 → $0.028 = 37.8 % reduction, clears ≥ 30 %
+        assert "cost" in ranked[0].dominance.winning_axes

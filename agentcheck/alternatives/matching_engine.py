@@ -12,13 +12,18 @@ from .models import (
     RecommendationType,
 )
 
-# --- Dominance thresholds (from SDD v0.4 §2) ---
+# --- Dominance thresholds (SDD v0.4 §2) ---
 _RELIABILITY_WIN_THRESHOLD = 0.10    # +10 pp completion rate
 _COST_WIN_THRESHOLD = 0.30           # -30 % cost
-_COMPLEXITY_WIN_THRESHOLD = 0.40     # -40 % LOC / cyclomatic
+_COMPLEXITY_WIN_THRESHOLD = 0.40     # -40 % LOC
 _REGRESSION_GUARD = 0.15             # no axis may regress more than 15 %
 
-# Patterns that strongly suggest the LLM can be deleted
+# Security: alternative wins if it has strictly fewer findings
+# (can't express as a % because original may have 0)
+_SECURITY_WIN_MIN_REDUCTION = 1      # must eliminate at least 1 finding
+
+_TOP_N = 3  # maximum candidates returned by top3()
+
 _DETERMINISTIC_PATTERNS = {
     DetectedPattern.DETERMINISTIC_TRANSFORM,
     DetectedPattern.SIMPLE_EXTRACTION,
@@ -46,6 +51,7 @@ class DominanceChecker:
         reliability_delta: Optional[float] = None
         cost_delta: Optional[float] = None
         complexity_delta: Optional[float] = None
+        security_delta: Optional[float] = None
 
         # --- Reliability axis ---
         if profile.task_completion_rate is not None:
@@ -63,22 +69,19 @@ class DominanceChecker:
         if profile.cost_per_task_usd is not None and profile.cost_per_task_usd > 0:
             alt_cost = candidate.kb_metrics.cost_per_task_usd
             cur_cost = profile.cost_per_task_usd
-            # cost delta: positive means the alternative is cheaper
-            delta = (cur_cost - alt_cost) / cur_cost
+            delta = (cur_cost - alt_cost) / cur_cost  # positive = cheaper
             cost_delta = round(delta * 100, 2)
 
             if delta >= _COST_WIN_THRESHOLD:
                 winning_axes.append("cost")
             elif delta < -_REGRESSION_GUARD:
-                # alternative is more expensive — not a regression per SDD,
-                # but flag it so the report is honest
                 regressed_axes.append("cost")
 
         # --- Complexity axis (LOC proxy) ---
         if profile.loc is not None and profile.loc > 0:
             alt_loc = candidate.kb_metrics.loc_estimate
             cur_loc = profile.loc
-            delta = (cur_loc - alt_loc) / cur_loc
+            delta = (cur_loc - alt_loc) / cur_loc  # positive = simpler
             complexity_delta = round(delta * 100, 2)
 
             if delta >= _COMPLEXITY_WIN_THRESHOLD:
@@ -86,9 +89,27 @@ class DominanceChecker:
             elif delta < -_REGRESSION_GUARD:
                 regressed_axes.append("complexity")
 
-        dominates = len(winning_axes) > 0 and len(regressed_axes) == 0
+        # --- Security axis ---
+        if profile.security_finding_count is not None:
+            cur_sec = profile.security_finding_count
+            alt_sec = candidate.kb_metrics.security_finding_count
 
-        reason = _build_reason(dominates, winning_axes, regressed_axes)
+            if cur_sec > 0:
+                delta = (cur_sec - alt_sec) / cur_sec  # positive = safer
+                security_delta = round(delta * 100, 2)
+                if (cur_sec - alt_sec) >= _SECURITY_WIN_MIN_REDUCTION:
+                    winning_axes.append("security")
+                elif delta < -_REGRESSION_GUARD:
+                    regressed_axes.append("security")
+            elif alt_sec == 0:
+                # both clean — neutral, no win, no regression
+                security_delta = 0.0
+            else:
+                # original clean, alternative has findings → regression
+                regressed_axes.append("security")
+                security_delta = -100.0
+
+        dominates = len(winning_axes) > 0 and len(regressed_axes) == 0
 
         return DominanceResult(
             candidate_id=candidate.id,
@@ -96,9 +117,10 @@ class DominanceChecker:
             reliability_delta_pct=reliability_delta,
             cost_delta_pct=cost_delta,
             complexity_delta_pct=complexity_delta,
+            security_delta_pct=security_delta,
             winning_axes=winning_axes,
             regressed_axes=regressed_axes,
-            reason=reason,
+            reason=_build_reason(dominates, winning_axes, regressed_axes),
         )
 
 
@@ -122,7 +144,7 @@ class MatchingEngine:
     Usage::
 
         engine = MatchingEngine()
-        report_candidates = engine.rank(profile)
+        top3 = engine.top3(profile)
     """
 
     def __init__(self, candidates: Optional[list[AlternativeCandidate]] = None) -> None:
@@ -134,13 +156,17 @@ class MatchingEngine:
     # ------------------------------------------------------------------
 
     def rank(self, profile: AgentProfile) -> list[AlternativeCandidate]:
-        """Return KB candidates ranked best-first, with dominance analysis attached."""
+        """Return ALL eligible KB candidates ranked best-first."""
         scored = [
             sc for c in self._candidates
             if (sc := self._evaluate(profile, c)) is not None
         ]
         scored.sort(key=lambda s: (-int(s.dominance.dominates), -s.composite_score))
         return [s.candidate for s in scored]
+
+    def top3(self, profile: AgentProfile) -> list[AlternativeCandidate]:
+        """Return the top 3 candidates (or fewer if KB has fewer qualifying entries)."""
+        return self.rank(profile)[:_TOP_N]
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -156,14 +182,11 @@ class MatchingEngine:
 
         dominance = self._checker.check(profile, candidate)
         candidate.dominance = dominance
-
         score = self._composite_score(dominance, candidate.freshness_score)
         return _ScoredCandidate(candidate=candidate, dominance=dominance, composite_score=score)
 
     def _is_eligible(self, profile: AgentProfile, candidate: AlternativeCandidate) -> bool:
-        """Pre-filter: skip candidates that are obviously a bad fit."""
-
-        # Never recommend the same framework the agent already uses
+        # Never recommend the framework the agent already uses
         if (
             candidate.recommendation_type == RecommendationType.FRAMEWORK_SHIFT
             and profile.framework
@@ -171,12 +194,12 @@ class MatchingEngine:
         ):
             return False
 
-        # Only suggest delete_the_llm if the agent's patterns qualify
+        # delete_the_llm only when the task is genuinely deterministic
         if candidate.recommendation_type == RecommendationType.DELETE_THE_LLM:
             if not _DETERMINISTIC_PATTERNS.intersection(set(profile.detected_patterns)):
                 return False
 
-        # Skip stale KB entries (freshness < 0.5 means snapshot is very old)
+        # Stale KB entries lose trust
         if candidate.freshness_score < 0.5:
             return False
 
@@ -184,12 +207,13 @@ class MatchingEngine:
 
     @staticmethod
     def _composite_score(dominance: DominanceResult, freshness: float) -> float:
-        """Higher is better. Winning axes each contribute; freshness is a multiplier."""
         base = 0.0
         if dominance.cost_delta_pct is not None:
-            base += max(0.0, dominance.cost_delta_pct) * 0.5
+            base += max(0.0, dominance.cost_delta_pct) * 0.40
         if dominance.reliability_delta_pct is not None:
-            base += max(0.0, dominance.reliability_delta_pct) * 0.3
+            base += max(0.0, dominance.reliability_delta_pct) * 0.30
         if dominance.complexity_delta_pct is not None:
-            base += max(0.0, dominance.complexity_delta_pct) * 0.2
+            base += max(0.0, dominance.complexity_delta_pct) * 0.20
+        if dominance.security_delta_pct is not None:
+            base += max(0.0, dominance.security_delta_pct) * 0.10
         return round(base * freshness, 4)
