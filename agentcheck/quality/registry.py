@@ -1,5 +1,5 @@
 # agent_registry.py
-from dummy_agents import wasteful_agent, efficient_agent
+from .samples.dummy_agents import wasteful_agent, efficient_agent
 # כאן תוכל לייבא סוכנים מ-50 קבצים שונים
 
 AGENTS = {

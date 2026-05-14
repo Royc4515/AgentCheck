@@ -1,9 +1,10 @@
 import json
 import yaml
 from collections import Counter
-import openai # חובה לשופט
-from dotenv import load_dotenv
-load_dotenv()
+
+from agentcheck.shared import OpenRouterClient
+from agentcheck.shared.openrouter_client import OpenRouterError
+
 # ==========================================
 # 1. Cost Estimator
 # ==========================================
@@ -81,20 +82,18 @@ def analyze_llm_baseline(task_prompt, actual_tokens):
     """
     
     try:
-        client = openai.OpenAI(base_url="https://openrouter.ai/api/v1")
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"The task is: '{task_prompt}'"}
-            ]
-        )
-        
-        result = json.loads(response.choices[0].message.content)
-        llm_tokens = result.get("estimated_tokens", heuristic_tokens)
-        
-    except Exception as e:
+        client = OpenRouterClient()
+        if client.has_key:
+            result = client.chat_json(
+                [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"The task is: '{task_prompt}'"},
+                ],
+                temperature=0.2,
+                max_tokens=200,
+            )
+            llm_tokens = int(result.get("estimated_tokens", heuristic_tokens))
+    except (OpenRouterError, ValueError, TypeError) as e:
         print(f"   [Judge Warning] API failed, relying solely on math: {e}")
 
     # 3. השילוב! עושים ממוצע בין המתמטיקה לבין מה שה-AI אמר

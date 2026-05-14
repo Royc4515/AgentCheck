@@ -1,4 +1,4 @@
-from utils import count_tokens
+from agentcheck.efficiency.utils import count_tokens  # noqa: F401
 
 def generic_adapter(task_prompt, legacy_agent):
     # 1. הפעלת הסוכן האמיתי (נניח שהוא נקרא legacy_agent)
