@@ -10,8 +10,8 @@ Set `GROQ_API_KEY` in your environment before running.
 | Step | Module | Status |
 |------|--------|--------|
 | Part 1 — Quality | `agentcheck/quality/` | ✅ working (Groq) |
-| Part 2 — Efficiency | `agentcheck/efficiency/` | 🔄 current |
-| Part 3 — Security | `agentcheck/security/` | pending |
+| Part 2 — Efficiency | `agentcheck/efficiency/` | ✅ working (Groq) |
+| Part 3 — Security | `agentcheck/security/` | 🔄 current |
 | Part 4 — Alternatives | `agentcheck/alternatives/` | pending |
 
 ## Key Files
