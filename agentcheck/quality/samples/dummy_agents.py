@@ -1,6 +1,6 @@
 # dummy_agents.py
 import time
-from utils import count_tokens
+from agentcheck.efficiency.utils import count_tokens
 
 def universal_adapter(task_prompt):
     # 1. הרצת הסוכן הגנרי (שמייצג כל סוכן שתקבל)

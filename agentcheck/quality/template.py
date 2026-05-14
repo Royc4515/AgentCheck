@@ -1,5 +1,5 @@
 # agent_template.py (שמור את זה מראש!)
-from utils import count_tokens
+from agentcheck.efficiency.utils import count_tokens
 
 def quick_adapter(user_prompt):
     # ==========================================
