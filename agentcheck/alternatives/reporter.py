@@ -59,6 +59,7 @@ class AlternativesReporter:
         )
         self._console.rule(style="cyan")
 
+        self._print_overall_score(report)
         self._print_profile(report)
 
         if not report.comparisons:
@@ -76,6 +77,48 @@ class AlternativesReporter:
             f"Candidates evaluated: {report.total_candidates_evaluated}[/dim]"
         )
         return ""
+
+    def _print_overall_score(self, report: FullComparisonReport) -> None:
+        assert self._console is not None
+        s = report.overall_score
+        if s is None or s.overall_grade is None:
+            return
+
+        grade_color = {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(
+            s.overall_grade.value, "white"
+        )
+
+        table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2))
+        table.add_column("Check", style="dim", min_width=14)
+        table.add_column("Score", justify="right", min_width=8)
+        table.add_column("Grade", justify="center", min_width=6)
+
+        if s.reliability_score is not None:
+            table.add_row(
+                "#1 Reliability",
+                f"{s.reliability_score:.0f} / 100",
+                _grade_badge(s.reliability_grade),
+            )
+        if s.efficiency_score is not None:
+            table.add_row(
+                "#2 Efficiency",
+                f"{s.efficiency_score:.0f} / 100",
+                _grade_badge(s.efficiency_grade),
+            )
+        if s.security_score is not None:
+            table.add_row(
+                "#3 Security",
+                f"{s.security_score:.0f} / 100",
+                _grade_badge(s.security_grade),
+            )
+        table.add_row("", "", "")
+        table.add_row(
+            "[bold]Overall[/bold]",
+            f"[bold]{s.overall_score:.0f} / 100[/bold]",
+            f"[{grade_color}][bold]{s.overall_grade.value}[/bold][/{grade_color}]",
+        )
+
+        self._console.print(Panel(table, title="AgentCheck Score", border_style=grade_color))
 
     def _print_profile(self, report: FullComparisonReport) -> None:
         assert self._console is not None
@@ -242,6 +285,15 @@ def _fmt_verdict(comp: CandidateComparison) -> str:
         axes = ", ".join(d.regressed_axes)
         return f"[red]✗ regresses {axes}[/red]"
     return "[yellow]~ no clear win[/yellow]"
+
+
+def _grade_badge(grade) -> str:
+    if grade is None:
+        return "[dim]n/a[/dim]"
+    color = {"A": "green", "B": "green", "C": "yellow", "D": "red", "F": "bold red"}.get(
+        grade.value, "white"
+    )
+    return f"[{color}]{grade.value}[/{color}]"
 
 
 def _fmt_type(rec_type: RecommendationType) -> str:

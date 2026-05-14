@@ -33,6 +33,7 @@ from .models import (
     ValidationResult,
 )
 from .profile_loader import AgentProfileLoader
+from .scorer import OverallScorer
 from .validation import LLMAgentGenerator, ValidationPipeline
 
 
@@ -77,6 +78,7 @@ class AlternativesEngine:
             generator=LLMAgentGenerator(),
             runner=runner or StubCheckRunner(),
         )
+        self._scorer = OverallScorer()
 
     def run(self) -> FullComparisonReport:
         profile = self._loader.load()
@@ -93,6 +95,7 @@ class AlternativesEngine:
 
         return FullComparisonReport(
             agent_profile=profile,
+            overall_score=self._scorer.score(profile),
             comparisons=comparisons,
             validation_results=validations,
             kb_snapshot_date=datetime.date.today().isoformat(),

@@ -11,6 +11,8 @@ from .models import (
     DetectedPattern,
     DominanceResult,
     FullComparisonReport,
+    LetterGrade,
+    OverallScore,
     RecommendationType,
     ReliabilityResult,
     SecurityResult,
@@ -21,6 +23,7 @@ from .models import (
 from .profile_loader import AgentProfileLoader, CheckResultNotFound
 from .reporter import AlternativesReporter
 from .check_runner import CheckRunner, RealCheckRunner, StubCheckRunner
+from .scorer import OverallScorer
 from .validation import (
     BatteryRunner,
     FairnessGuard,
@@ -31,6 +34,9 @@ from .validation import (
 
 __all__ = [
     "CheckRunner",
+    "LetterGrade",
+    "OverallScore",
+    "OverallScorer",
     "RealCheckRunner",
     "StubCheckRunner",
     "AgentProfile",

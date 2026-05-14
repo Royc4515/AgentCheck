@@ -222,6 +222,45 @@ class AlternativeCandidate(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Overall score (synthesised from all three checks)
+# ---------------------------------------------------------------------------
+
+class LetterGrade(str, Enum):
+    A = "A"
+    B = "B"
+    C = "C"
+    D = "D"
+    F = "F"
+
+
+class OverallScore(BaseModel):
+    """Composite health score derived from checks #1, #2, #3.
+
+    Each axis is normalised to 0–100 (higher = better) then weighted:
+        Reliability  40 %
+        Efficiency   30 %  (inverted waste_score)
+        Security     30 %
+    """
+
+    # Per-axis numeric scores (0–100, higher is better)
+    reliability_score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    efficiency_score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    security_score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+
+    # Per-axis letter grades
+    reliability_grade: Optional[LetterGrade] = None
+    efficiency_grade: Optional[LetterGrade] = None
+    security_grade: Optional[LetterGrade] = None
+
+    # Weighted composite
+    overall_score: Optional[float] = Field(default=None, ge=0.0, le=100.0)
+    overall_grade: Optional[LetterGrade] = None
+
+    # Which checks contributed (depends on which JSONs were present)
+    axes_available: list[str] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Comparison report (the actual output of check #4)
 # ---------------------------------------------------------------------------
 
@@ -247,6 +286,7 @@ class FullComparisonReport(BaseModel):
     """Top-level output of check #4."""
 
     agent_profile: AgentProfile
+    overall_score: Optional[OverallScore] = None
     # Always the top 3 (or fewer if KB has fewer qualifying candidates)
     comparisons: list[CandidateComparison] = Field(default_factory=list)
     # Populated only in empirical mode (--validate-alternative)
@@ -296,3 +336,6 @@ class ValidationResult(BaseModel):
 
 # Legacy alias so existing tests don't break
 AlternativesReport = FullComparisonReport
+
+# Re-export LetterGrade for convenience
+__all__ = ["LetterGrade", "OverallScore"]
