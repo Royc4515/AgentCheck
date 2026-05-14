@@ -1,6 +1,17 @@
 # pricing.yaml
 snapshot_date: 2026-05-14
 models:
+  # Groq models (primary provider)
+  llama-3.3-70b-versatile:
+    input_per_1m: 0.59
+    output_per_1m: 0.79
+  llama-3.1-8b-instant:
+    input_per_1m: 0.05
+    output_per_1m: 0.08
+  gemma2-9b-it:
+    input_per_1m: 0.20
+    output_per_1m: 0.20
+  # OpenAI models (legacy / comparison)
   gpt-4o:
     input_per_1m: 2.50
     output_per_1m: 10.00
@@ -9,9 +20,10 @@ models:
     input_per_1m: 0.15
     output_per_1m: 0.60
     cached_input_per_1m: 0.075
-  gpt-3.5-turbo:  # ADD THIS BLOCK
+  gpt-3.5-turbo:
     input_per_1m: 0.50
     output_per_1m: 1.50
+  # Anthropic models (legacy / comparison)
   claude-sonnet-4-7:
     input_per_1m: 3.00
     output_per_1m: 15.00
