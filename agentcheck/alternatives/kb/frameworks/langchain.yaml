@@ -1,0 +1,52 @@
+id: langchain
+name: LangChain
+type: framework
+version_snapshot: "0.3"
+snapshot_date: "2026-05"
+
+metrics:
+  reliability_score: 0.72          # task completion rate on standard benchmark
+  cost_per_task_usd: 0.045         # median across benchmark tasks
+  loc_estimate: 180                # median LOC for a ReAct agent
+  cyclomatic_complexity: 24
+  cold_start_latency_ms: 1200
+
+detection_signatures:
+  imports:
+    - langchain
+    - langchain_core
+    - langchain_community
+    - langchain_openai
+    - langchain_anthropic
+  class_names:
+    - AgentExecutor
+    - LLMChain
+    - ChatPromptTemplate
+    - StructuredChatAgent
+
+strengths:
+  - Large ecosystem of pre-built integrations
+  - Strong community and documentation
+  - Battle-tested retrieval chains
+
+weaknesses:
+  - Significant abstraction overhead — magic chains hide failure modes
+  - High LOC for simple tasks
+  - Callback/middleware system adds latency
+  - Breaking changes across major versions
+
+best_fit_patterns:
+  - react_loop
+  - rag_pipeline
+
+poor_fit_patterns:
+  - simple_extraction         # overkill
+  - single_tool_call          # overkill
+  - deterministic_transform   # LLM not needed at all
+
+maintenance:
+  last_release_days_ago: 14
+  open_issues: 4200
+  health: active
+
+evidence_url: "https://github.com/langchain-ai/langchain"

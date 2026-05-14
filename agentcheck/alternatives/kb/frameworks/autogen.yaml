@@ -1,0 +1,49 @@
+id: autogen
+name: AutoGen
+type: framework
+version_snapshot: "0.4"
+snapshot_date: "2026-05"
+
+metrics:
+  reliability_score: 0.74
+  cost_per_task_usd: 0.091          # multi-agent conversations multiply cost fast
+  loc_estimate: 140
+  cyclomatic_complexity: 19
+  cold_start_latency_ms: 900
+
+detection_signatures:
+  imports:
+    - autogen
+    - autogen_agentchat
+    - autogen_core
+  class_names:
+    - AssistantAgent
+    - UserProxyAgent
+    - GroupChat
+    - ConversableAgent
+
+strengths:
+  - Purpose-built for multi-agent orchestration
+  - Code execution sandbox included
+  - Strong for debate/critic patterns
+
+weaknesses:
+  - Expensive by default (conversation loops burn tokens)
+  - Complex state management in group chats
+  - Overkill for single-agent tasks
+
+best_fit_patterns:
+  - multi_agent_debate
+  - code_generation_with_review
+
+poor_fit_patterns:
+  - single_tool_call
+  - simple_extraction
+  - deterministic_transform
+
+maintenance:
+  last_release_days_ago: 21
+  open_issues: 890
+  health: active
+
+evidence_url: "https://github.com/microsoft/autogen"

@@ -1,0 +1,32 @@
+id: plan_and_execute
+name: Plan-and-Execute
+type: pattern
+snapshot_date: "2026-05"
+description: >
+  A planner LLM call produces a structured task list upfront. An executor
+  (smaller model or deterministic code) runs each step independently.
+  The planner only fires once per task.
+
+metrics:
+  reliability_score: 0.82
+  relative_cost_multiplier: 0.55  # planner once + cheap executor >> ReAct loop
+  loc_estimate: 130
+  avg_tool_calls_per_task: 3.1
+
+strengths:
+  - Cheap executor model (Haiku / GPT-4o-mini) handles routine steps
+  - Plan is inspectable — better debuggability
+  - Steps can be parallelized
+
+weaknesses:
+  - Planner can produce bad plans that executor blindly follows
+  - Requires structured plan schema (extra upfront design)
+
+best_fit_tasks:
+  - multi_step_research
+  - report_generation
+  - data_pipeline_orchestration
+
+poor_fit_tasks:
+  - highly_dynamic_tasks        # plan goes stale mid-execution
+  - deterministic_transform     # LLM not needed at all

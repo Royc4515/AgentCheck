@@ -1,0 +1,38 @@
+id: model_downgrade
+name: Model Downgrade
+type: architectural_shift
+snapshot_date: "2026-05"
+description: >
+  Swap the current frontier model for a cheaper tier on the same provider's
+  downgrade ladder. Only recommended when the cheaper model passes ≥85% of
+  the same tasks (i.e., does not regress reliability by more than 15%).
+
+downgrade_ladders:
+  anthropic:
+    - claude-opus-4-7
+    - claude-sonnet-4-6
+    - claude-haiku-4-5
+  openai:
+    - gpt-4o
+    - gpt-4o-mini
+    - gpt-3.5-turbo
+  google:
+    - gemini-pro
+    - gemini-flash
+    - gemini-flash-lite
+
+trigger_patterns:
+  - model_over_spec   # waste check v0.2 already flagged this
+
+metrics_impact:
+  cost_reduction_range_pct: [30, 90]  # depends on ladder step
+  reliability_risk_pct: [0, 25]       # must stay ≤15% for recommendation
+
+regression_guard:
+  max_reliability_regression_pct: 15
+  test_sample_size: 5                 # run on sample to control audit cost
+
+evidence: >
+  Internal benchmarks show claude-haiku-4-5 matches claude-sonnet-4-6 on
+  classification and extraction tasks ~87% of the time at ~8x lower cost.
+  The gap widens on multi-step reasoning (complex ReAct loops).

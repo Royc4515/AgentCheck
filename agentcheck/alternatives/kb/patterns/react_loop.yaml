@@ -1,0 +1,31 @@
+id: react_loop
+name: ReAct Loop
+type: pattern
+snapshot_date: "2026-05"
+description: >
+  Reason-Act-Observe cycle. The LLM alternates between reasoning steps and
+  tool calls, observing tool output before the next step.
+
+metrics:
+  reliability_score: 0.76
+  relative_cost_multiplier: 1.0    # baseline
+  loc_estimate: 100
+  avg_tool_calls_per_task: 4.2
+
+strengths:
+  - General-purpose; handles open-ended tasks well
+  - Easy to implement with any framework
+
+weaknesses:
+  - Token-heavy — every reasoning step is billed
+  - Prone to reasoning loops on ambiguous tasks
+  - Each tool call is sequential by default
+
+best_fit_tasks:
+  - multi_step_research
+  - ambiguous_planning
+
+poor_fit_tasks:
+  - simple_extraction          # overkill
+  - parallel_data_fetching     # sequential is wasteful
+  - deterministic_transform    # LLM not needed at all
