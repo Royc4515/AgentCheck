@@ -123,7 +123,12 @@ class _LLMClientShim:
             return f'{{"error": "{exc}"}}'
 
 
-def run_quality(agent_path: Path, results_dir: Path) -> ReliabilityResult:
+def run_quality(
+    agent_path: Path,
+    results_dir: Path,
+    task: Optional[str] = None,
+    agent_description: Optional[str] = None,
+) -> ReliabilityResult:
     """Execute Part 1 against the agent at ``agent_path`` and persist results."""
     agent_path = Path(agent_path).resolve()
     results_dir = ensure_results_dir(Path(results_dir))
@@ -138,7 +143,14 @@ def run_quality(agent_path: Path, results_dir: Path) -> ReliabilityResult:
 
     try:
         agent_fn, fn_name = _load_agent_callable(agent_path)
-        purpose = _infer_purpose(agent_path, source, fn_name)
+        if task and agent_description:
+            purpose = f"{agent_description}. Task: {task}"
+        elif task:
+            purpose = task
+        elif agent_description:
+            purpose = agent_description
+        else:
+            purpose = _infer_purpose(agent_path, source, fn_name)
         client = OpenRouterClient()
         shim = _LLMClientShim(client)
         generator = DynamicTestGenerator(shim)
