@@ -1,34 +1,17 @@
 import json
 
+
 class QualityEvaluator:
     def __init__(self, llm_client):
         self.llm_client = llm_client
-
-    def evaluate_metric(
-        self, agent_output: str, metric_name: str, rubric: str, test_prompt: str = ""
-    ) -> dict:
-        prompt_context = (
-            f"\nOriginal Test Prompt:\n'''{test_prompt}'''\n" if test_prompt else ""
-        )
-        prompt = f"""
-        Evaluate this AI agent's output based ONLY on the following rubric.
-        Rubric for {metric_name}: {rubric}
-        {prompt_context}
-        Agent Output:
-        '''{agent_output}'''
-
-        Return ONLY valid JSON: {{"score": <0-100>, "reason": "<short>"}}
-        """
-        response_text = self.llm_client.generate(prompt)
-        try:
-            return json.loads(response_text)
-        except:
-            return {"score": 0, "reason": "Evaluation failed to parse"}
 
     def evaluate_all(
         self, agent_outputs: dict, metrics: list, test_prompts: dict | None = None
     ) -> dict:
         """Score every test output against every metric.
+
+        Batches all metrics into a single LLM call per test to stay within
+        Groq rate limits (1 call per test instead of 1 per metric per test).
 
         agent_outputs: {test_name: output_str}
         test_prompts:  {test_name: prompt_str}  — optional; enables context-aware scoring
@@ -36,16 +19,52 @@ class QualityEvaluator:
         results = {}
         total_overall_score = 0
 
+        metrics_block = "\n".join(
+            f'  "{m["metric_name"]}": "{m["rubric"]}"'
+            for m in metrics
+        )
+        metric_names = [m["metric_name"] for m in metrics]
+
         for test_name, output in agent_outputs.items():
-            test_score = 0
-            metric_results = {}
             prompt_ctx = (test_prompts or {}).get(test_name, "")
-            for metric in metrics:
-                res = self.evaluate_metric(
-                    output, metric["metric_name"], metric["rubric"], prompt_ctx
-                )
-                metric_results[metric["metric_name"]] = res
-                test_score += res.get("score", 0)
+            prompt_context_line = (
+                f"\nOriginal Test Prompt:\n'''{prompt_ctx}'''\n" if prompt_ctx else ""
+            )
+
+            prompt = f"""
+You are a QA evaluator. Score the agent output below against EACH metric.
+{prompt_context_line}
+Agent Output:
+'''{output}'''
+
+Metrics and rubrics:
+{{
+{metrics_block}
+}}
+
+Return ONLY valid JSON with a score (0-100) and short reason for each metric:
+{{
+{chr(10).join(f'  "{name}": {{"score": <0-100>, "reason": "<short>"}}' for name in metric_names)}
+}}
+"""
+            response_text = self.llm_client.generate(prompt)
+            try:
+                parsed = json.loads(response_text)
+            except Exception:
+                parsed = {}
+
+            metric_results = {}
+            test_score = 0
+            for name in metric_names:
+                entry = parsed.get(name, {})
+                if not isinstance(entry, dict):
+                    entry = {}
+                score = entry.get("score", 0)
+                metric_results[name] = {
+                    "score": score,
+                    "reason": entry.get("reason", "parse error"),
+                }
+                test_score += score
 
             avg_test_score = test_score / len(metrics) if metrics else 0
             results[test_name] = {"score": avg_test_score, "details": metric_results}

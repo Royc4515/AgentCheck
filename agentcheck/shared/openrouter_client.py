@@ -18,7 +18,7 @@ import requests
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _DEFAULT_TIMEOUT = 30.0
-_RETRY_DELAYS = (2.0, 4.0, 8.0)  # seconds between retries on 429
+_RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds between retries on 429
 
 
 class OpenRouterError(RuntimeError):
@@ -95,8 +95,9 @@ class OpenRouterClient:
                     timeout=self._timeout,
                 )
                 if response.status_code == 429 and delay is not None:
-                    print(f"   [Groq] Rate limited, retrying in {delay:.0f}s...")
-                    time.sleep(delay)
+                    wait = float(response.headers.get("retry-after", delay))
+                    print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
+                    time.sleep(wait)
                     continue
                 response.raise_for_status()
                 data = response.json()
