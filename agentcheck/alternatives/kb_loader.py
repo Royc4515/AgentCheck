@@ -83,6 +83,7 @@ def load_kb() -> list[AlternativeCandidate]:
             weaknesses=list(raw.get("weaknesses", [])),
             code_example=_code_example(raw),
             evidence_url=raw.get("evidence_url"),
+            data_provenance=dict(raw.get("data_provenance", {})),
         )
         candidates.append(candidate)
 

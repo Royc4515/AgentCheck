@@ -3,6 +3,7 @@ name: AutoGen
 type: framework
 version_snapshot: "0.4"
 snapshot_date: "2026-05"
+pricing_model: "anthropic/claude-sonnet-4.5"
 
 metrics:
   reliability_score: 0.74
@@ -47,3 +48,10 @@ maintenance:
   health: active
 
 evidence_url: "https://github.com/microsoft/autogen"
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

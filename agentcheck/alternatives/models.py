@@ -244,6 +244,11 @@ class AlternativeCandidate(BaseModel):
     code_example: Optional[str] = None
     evidence_url: Optional[str] = None
 
+    # Per-field source tag.  Values are short strings like
+    # "github_2026-05-14", "openrouter_2026-05-14", or "estimate".
+    # Reporter uses these to badge measured metrics vs. hand-written estimates.
+    data_provenance: dict[str, str] = Field(default_factory=dict)
+
 
 # ---------------------------------------------------------------------------
 # Overall score (synthesised from all three checks)

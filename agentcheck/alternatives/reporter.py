@@ -176,14 +176,21 @@ class AlternativesReporter:
                 lines.append(f"  [red]−[/red] {w}")
             lines.append("")
 
-        # Key metrics (KB-sourced)
+        # Key metrics (KB-sourced) — each tagged with data provenance
+        prov = c.data_provenance
         metrics_parts = []
         if comp.alt_reliability is not None:
-            metrics_parts.append(f"Reliability {comp.alt_reliability:.0%}")
+            metrics_parts.append(
+                f"Reliability {comp.alt_reliability:.0%} {_badge(prov.get('metrics.reliability_score'))}"
+            )
         if comp.alt_cost is not None:
-            metrics_parts.append(f"Cost ${comp.alt_cost:.4f}/task")
+            metrics_parts.append(
+                f"Cost ${comp.alt_cost:.4f}/task {_badge(prov.get('metrics.cost_per_task_usd'))}"
+            )
         if comp.alt_loc is not None:
-            metrics_parts.append(f"~{comp.alt_loc} LOC")
+            metrics_parts.append(
+                f"~{comp.alt_loc} LOC {_badge(prov.get('metrics.loc_estimate'))}"
+            )
         if metrics_parts:
             lines.append(f"[dim]KB data: {' · '.join(metrics_parts)}[/dim]")
 
@@ -247,6 +254,17 @@ def _grade_badge(grade) -> str:
         return "[dim]n/a[/dim]"
     color = _grade_color(grade.value)
     return f"[{color}]{grade.value}[/{color}]"
+
+
+def _badge(provenance_tag: Optional[str]) -> str:
+    """Render a provenance badge for a metric.
+
+    Tags starting with "github_" / "openrouter_" / "radon_" are measured;
+    "estimate" or missing → hand-written.
+    """
+    if not provenance_tag or provenance_tag == "estimate":
+        return "[yellow](est)[/yellow]"
+    return "[green](measured)[/green]"
 
 
 def _fmt_type(rec_type: RecommendationType) -> str:

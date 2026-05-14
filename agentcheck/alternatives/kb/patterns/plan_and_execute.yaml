@@ -30,3 +30,10 @@ best_fit_tasks:
 poor_fit_tasks:
   - highly_dynamic_tasks        # plan goes stale mid-execution
   - deterministic_transform     # LLM not needed at all
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

@@ -43,3 +43,10 @@ evidence: >
   formatting variance. Regex is 100% on well-formed input. Use LLMs only
   when the extraction boundary is ambiguous (e.g., "extract the recipient's
   intent from this email").
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

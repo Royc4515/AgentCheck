@@ -36,3 +36,10 @@ evidence: >
   Internal benchmarks show claude-haiku-4-5 matches claude-sonnet-4-6 on
   classification and extraction tasks ~87% of the time at ~8x lower cost.
   The gap widens on multi-step reasoning (complex ReAct loops).
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

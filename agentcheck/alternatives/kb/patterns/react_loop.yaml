@@ -29,3 +29,10 @@ poor_fit_tasks:
   - simple_extraction          # overkill
   - parallel_data_fetching     # sequential is wasteful
   - deterministic_transform    # LLM not needed at all
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

@@ -3,6 +3,7 @@ name: Raw SDK (OpenAI / Anthropic)
 type: framework
 version_snapshot: "2026-05"
 snapshot_date: "2026-05"
+pricing_model: "anthropic/claude-sonnet-4.5"
 
 metrics:
   reliability_score: 0.85          # no framework bugs; only your bugs
@@ -47,3 +48,10 @@ maintenance:
   health: active
 
 evidence_url: "https://github.com/openai/openai-python"
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate
