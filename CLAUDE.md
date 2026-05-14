@@ -10,9 +10,9 @@ Set `GROQ_API_KEY` in your environment before running.
 | Step | Module | Status |
 |------|--------|--------|
 | Part 1 — Quality | `agentcheck/quality/` | ✅ working (Groq) |
-| Part 2 — Efficiency | `agentcheck/efficiency/` | 🔄 current |
-| Part 3 — Security | `agentcheck/security/` | pending |
-| Part 4 — Alternatives | `agentcheck/alternatives/` | pending |
+| Part 2 — Efficiency | `agentcheck/efficiency/` | ✅ working (Groq) |
+| Part 3 — Security | `agentcheck/security/` | ✅ working (Groq) |
+| Part 4 — Alternatives | `agentcheck/alternatives/` | ✅ working (Groq) |
 
 ## Key Files
 - Shared LLM client: `agentcheck/shared/openrouter_client.py`
