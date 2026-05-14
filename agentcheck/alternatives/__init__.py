@@ -80,7 +80,9 @@ def run(
     """
     engine = AlternativesEngine(results_dir=results_dir, strict=strict)
     report = engine.run()
-    AlternativesReporter(mode=output_mode).render(report)
+    rendered = AlternativesReporter(mode=output_mode).render(report)
+    if rendered:
+        print(rendered)
     return report
 
 
