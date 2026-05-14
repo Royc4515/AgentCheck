@@ -1,3 +1,4 @@
+# Python build / cache
 __pycache__/
 *.pyc
 *.pyo
@@ -8,5 +9,17 @@ dist/
 build/
 .venv/
 venv/
+
+# Secrets
 .env
+
+# AgentCheck runtime artefacts (must never be committed)
 .agentcheck/
+execution_log.json
+global_analytics.json
+reports/
+
+# OS / editor noise
+.DS_Store
+.idea/
+.vscode/

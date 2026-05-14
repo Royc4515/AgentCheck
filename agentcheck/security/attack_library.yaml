@@ -1,0 +1,52 @@
+# Static-analysis signatures for AgentCheck's security auditor.
+# Each entry describes a code pattern, its severity, and a short rationale.
+
+patterns:
+  - id: HARDCODED_API_KEY
+    severity: critical
+    title: Hardcoded API key
+    description: API key, token, or secret appears inline in source.
+    regex: '(sk-[A-Za-z0-9_\-]{16,}|gsk_[A-Za-z0-9_\-]{16,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,})'
+    cwe: CWE-798
+
+  - id: HARDCODED_PASSWORD
+    severity: high
+    title: Hardcoded credential
+    description: Variable named password/passwd/secret assigned a string literal.
+    regex: '(?i)(password|passwd|secret|api[_-]?key)\s*=\s*["''][^"'']{4,}["'']'
+    cwe: CWE-798
+
+  - id: UNSAFE_DESERIALIZATION
+    severity: high
+    title: Unsafe deserialization
+    description: Use of pickle.load, yaml.load (unsafe), or eval/exec on user input.
+    regex: '\b(pickle\.loads?|yaml\.load\b(?!_safe)|\beval\s*\(|\bexec\s*\()'
+    cwe: CWE-502
+
+  - id: SHELL_INJECTION
+    severity: high
+    title: Possible shell injection
+    description: os.system / subprocess with shell=True and a non-constant argument.
+    regex: '(os\.system\s*\(|subprocess\.[A-Za-z_]+\([^)]*shell\s*=\s*True)'
+    cwe: CWE-78
+
+  - id: PROMPT_INJECTION_SINK
+    severity: medium
+    title: Unsanitised data flowing into prompt
+    description: User-controlled string concatenated into a system/tool prompt.
+    regex: '(f["''][^"'']*\{[^}]*(input|user|request|payload|body)[^}]*\}[^"'']*["''])'
+    cwe: CWE-77
+
+  - id: TOOL_OVER_PRIVILEGED
+    severity: medium
+    title: Tool may be over-privileged
+    description: Tool function executes filesystem writes, network requests, or subprocess calls without a guard.
+    regex: '\b(open\([^)]+["'']w["'']|requests\.(post|put|delete)|subprocess\.(Popen|run|call))\b'
+    cwe: CWE-269
+
+  - id: SYSTEM_PROMPT_LEAK
+    severity: low
+    title: System prompt potentially echoed to user
+    description: System message variable is concatenated into agent output.
+    regex: '\b(system_(?:prompt|message)|SYSTEM_PROMPT)\b.*\+'
+    cwe: CWE-209

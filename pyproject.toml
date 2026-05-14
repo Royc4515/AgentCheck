@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentcheck"
+version = "0.4.0"
+description = "AI agent auditor — quality, efficiency, security, and alternatives in one CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "AgentCheck Team" }]
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "requests>=2.31",
+    "tiktoken>=0.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+]
+
+[project.scripts]
+agentcheck = "agentcheck.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agentcheck*"]
+exclude = ["tests*", "context*", "scripts*"]
+
+[tool.setuptools.package-data]
+"agentcheck.efficiency" = ["pricing.yaml"]
+"agentcheck.security" = ["attack_library.yaml"]
+"agentcheck.alternatives" = ["kb/**/*.yaml"]

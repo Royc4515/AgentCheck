@@ -1,8 +1,8 @@
 import json
 import yaml
 import random
-from sandbox_runner import run_sandbox
-from dummy_agents import efficient_agent # Using the efficient agent for the rerun test
+from .sandbox_runner import run_sandbox
+from agentcheck.quality.samples.dummy_agents import efficient_agent  # noqa: F401
 
 # ==========================================
 # 1. The Downgrade Ladder
@@ -25,11 +25,14 @@ DOWNGRADE_LADDER = {
 # ==========================================
 # Helper: Load Data
 # ==========================================
-def load_files():
+def load_files(results_dir=None):
     """Loads the original execution log and pricing table."""
-    with open("execution_log.json", "r", encoding="utf-8") as f:
+    from pathlib import Path as _P
+    results_dir = _P(results_dir) if results_dir else _P(".agentcheck")
+    pricing_path = _P(__file__).parent / "pricing.yaml"
+    with open(results_dir / "execution_log.json", "r", encoding="utf-8") as f:
         original_log = json.load(f)
-    with open("pricing.yaml", "r", encoding="utf-8") as f:
+    with open(pricing_path, "r", encoding="utf-8") as f:
         pricing = yaml.safe_load(f)
     return original_log, pricing
 
