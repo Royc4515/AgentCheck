@@ -67,6 +67,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Where to write JSON outputs (default: ./.agentcheck).",
     )
     run.add_argument(
+        "--task",
+        type=str,
+        default=None,
+        help="What the agent is supposed to do (used to generate quality tests).",
+    )
+    run.add_argument(
+        "--agent-description",
+        type=str,
+        default=None,
+        dest="agent_description",
+        help="Short description of the agent's purpose (used to generate quality tests).",
+    )
+    run.add_argument(
         "--skip",
         type=_parts_set,
         default=set(),
@@ -100,6 +113,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             results_dir=args.results_dir,
             skip=args.skip,
             only=args.only,
+            task=args.task,
+            agent_description=args.agent_description,
         )
         return 0
 

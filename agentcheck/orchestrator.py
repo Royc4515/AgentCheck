@@ -25,6 +25,8 @@ def run_pipeline(
     results_dir: Path,
     skip: Optional[set[str]] = None,
     only: Optional[set[str]] = None,
+    task: Optional[str] = None,
+    agent_description: Optional[str] = None,
 ) -> dict:
     """Run the AgentCheck pipeline and return a summary of which parts ran."""
     results_dir = ensure_results_dir(Path(results_dir))
@@ -46,7 +48,7 @@ def run_pipeline(
             try:
                 from .quality import run_quality
 
-                run_quality(agent_path, results_dir)
+                run_quality(agent_path, results_dir, task=task, agent_description=agent_description)
                 summary["quality"] = "ok"
             except Exception as exc:  # noqa: BLE001
                 summary["quality"] = f"error: {exc}"
