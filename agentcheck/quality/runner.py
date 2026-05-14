@@ -164,16 +164,18 @@ def run_quality(
             tests = [{"name": "smoke", "prompt": "Hello, please respond.", "type": "happy_path"}]
 
         outputs: dict[str, str] = {}
+        prompts: dict[str, str] = {}
         for t in tests:
             name = t.get("name", "test")
-            prompt = t.get("prompt", "")
+            test_prompt = t.get("prompt", "")
+            prompts[name] = test_prompt
             try:
-                outputs[name] = _invoke_agent(agent_fn, prompt)
+                outputs[name] = _invoke_agent(agent_fn, test_prompt)
             except Exception as exc:  # noqa: BLE001
                 outputs[name] = f"[ERROR] {exc}"
 
         if metrics and client.has_key:
-            judged = evaluator.evaluate_all(outputs, metrics)
+            judged = evaluator.evaluate_all(outputs, metrics, test_prompts=prompts)
             tasks_total = max(1, len(outputs))
             tasks_passed = sum(
                 1
