@@ -170,7 +170,11 @@ def run_quality(agent_path: Path, results_dir: Path) -> ReliabilityResult:
             )
         else:
             tasks_total = max(1, len(outputs))
-            tasks_passed = sum(1 for v in outputs.values() if not v.startswith("[ERROR]"))
+            tasks_passed = sum(
+                1
+                for v in outputs.values()
+                if not v.startswith("[ERROR]") and len(v.strip()) >= 50
+            )
     except Exception as exc:  # noqa: BLE001
         print(f"[quality] Skipping deep evaluation: {exc}")
         tasks_total = 1
