@@ -16,6 +16,7 @@ from .models import (
     FullComparisonReport,
     RecommendationType,
 )
+from .verdict import VerdictGenerator
 
 OutputMode = Literal["terminal", "json", "summary"]
 
@@ -34,9 +35,15 @@ except ImportError:
 class AlternativesReporter:
     """Renders a FullComparisonReport to the requested output mode."""
 
-    def __init__(self, mode: OutputMode = "terminal") -> None:
+    def __init__(
+        self,
+        mode: OutputMode = "terminal",
+        verdict_generator: Optional[VerdictGenerator] = None,
+    ) -> None:
         self._mode = mode
         self._console = Console() if _RICH_AVAILABLE else None
+        # None → create a default generator (reads $OPENROUTER_API_KEY itself)
+        self._verdict = verdict_generator if verdict_generator is not None else VerdictGenerator()
 
     def render(self, report: FullComparisonReport) -> str:
         if self._mode == "json":
@@ -63,6 +70,7 @@ class AlternativesReporter:
 
         self._print_overall_score(report)
         self._print_alternatives(report)
+        self._print_verdict(report)
 
         self._console.print()
         self._console.print(
@@ -210,6 +218,22 @@ class AlternativesReporter:
                 "\n".join(lines),
                 title=f"#{rank}  {c.name}",
                 border_style=border,
+            )
+        )
+
+    def _print_verdict(self, report: FullComparisonReport) -> None:
+        assert self._console is not None
+        text = self._verdict.generate(report)
+        if not text:
+            return
+        self._console.print()
+        self._console.rule(style="dim")
+        self._console.print(
+            Panel(
+                f"[italic]{text}[/italic]",
+                title="[bold magenta]⚡ The Verdict[/bold magenta]",
+                border_style="magenta",
+                padding=(1, 2),
             )
         )
 
