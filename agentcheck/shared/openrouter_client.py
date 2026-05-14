@@ -1,8 +1,9 @@
-"""Single LLM client routed through OpenRouter (OpenAI-compatible).
+"""Single LLM client routed through Groq (OpenAI-compatible).
 
 All LLM calls across AgentCheck flow through this module so we can change
 provider, key, or model in exactly one place. The key is read from the
-``OPENROUTER_API_KEY`` env var — never hardcoded.
+``GROQ_API_KEY`` env var (with ``OPENROUTER_API_KEY`` as a fallback for
+legacy setups) — never hardcoded.
 """
 
 from __future__ import annotations
@@ -13,17 +14,17 @@ from typing import Any, Optional
 
 import requests
 
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_MODEL = "anthropic/claude-haiku-4-5-20251001"
+_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+_DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _DEFAULT_TIMEOUT = 30.0
 
 
 class OpenRouterError(RuntimeError):
-    """Raised when the OpenRouter call cannot be completed."""
+    """Raised when the LLM call cannot be completed."""
 
 
 class OpenRouterClient:
-    """Minimal chat-completions client for OpenRouter."""
+    """Minimal chat-completions client for Groq (OpenAI-compatible API)."""
 
     def __init__(
         self,
@@ -33,7 +34,11 @@ class OpenRouterClient:
         referer: str = "https://github.com/royc4515/agentcheck",
         title: str = "AgentCheck",
     ) -> None:
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
+        self._api_key = (
+            api_key
+            or os.environ.get("GROQ_API_KEY", "")
+            or os.environ.get("OPENROUTER_API_KEY", "")
+        )
         self._model = model
         self._timeout = timeout
         self._referer = referer
@@ -63,7 +68,7 @@ class OpenRouterClient:
         """
         if not self._api_key:
             raise OpenRouterError(
-                "OPENROUTER_API_KEY is not set. Export it before running AgentCheck."
+                "GROQ_API_KEY is not set. Export it before running AgentCheck."
             )
 
         payload: dict[str, Any] = {
@@ -77,12 +82,10 @@ class OpenRouterClient:
 
         try:
             response = requests.post(
-                _OPENROUTER_URL,
+                _GROQ_URL,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": self._referer,
-                    "X-Title": self._title,
                 },
                 json=payload,
                 timeout=self._timeout,
@@ -91,7 +94,7 @@ class OpenRouterClient:
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
         except (requests.RequestException, KeyError, ValueError) as exc:
-            raise OpenRouterError(f"OpenRouter call failed: {exc}") from exc
+            raise OpenRouterError(f"Groq call failed: {exc}") from exc
 
     def chat_json(
         self,
