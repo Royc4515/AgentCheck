@@ -1,5 +1,6 @@
-import tiktoken
-def generic_adapter(task_prompt):
+from utils import count_tokens
+
+def generic_adapter(task_prompt, legacy_agent):
     # 1. הפעלת הסוכן האמיתי (נניח שהוא נקרא legacy_agent)
     response = legacy_agent.query(task_prompt)
     
@@ -11,9 +12,5 @@ def generic_adapter(task_prompt):
         "completion_tokens": response.get('usage', {}).get('completion_tokens', 100),
         "tools_called": response.get('metadata', {}).get('tools', [])
     }
-def estimate_tokens(text):
-    encoding = tiktoken.get_encoding("cl100k_base") # המקודד של GPT-4
-    return len(encoding.encode(text))
-
 # בתוך ה-Adapter:
-# tokens = estimate_tokens(response.text)
+# tokens = count_tokens(response.text)

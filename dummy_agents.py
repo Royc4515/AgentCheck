@@ -20,7 +20,7 @@ def universal_adapter(task_prompt):
         "completion_tokens": out_tokens,
         "tools_called": [] # אם אין לנו גישה ללוג הכלים
     }
-# dummy_agents.py
+
 def efficient_agent(task_prompt):
     # Super-slim agent for the "Perfect 0" demo
     return {

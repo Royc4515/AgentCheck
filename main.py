@@ -31,11 +31,9 @@ def start_audit(agent_name, task_prompt, model="gpt-4o-mini"):
     agent_func = AGENTS[agent_name]
     print(f"🚀 Starting Audit for: [{agent_name}]...")
     
-    run_sandbox(agent_func, task_prompt, model_name=model)
+    log = run_sandbox(agent_func, task_prompt, model_name=model)
     
     try:
-        with open("execution_log.json", "r") as f:
-            log = json.load(f)
         with open("pricing.yaml", "r") as f:
             pricing = yaml.safe_load(f)
     except Exception as e:
