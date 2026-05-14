@@ -113,6 +113,30 @@ def run_sandbox(
     return log
 
 
+def _failed_log(agent_path: Path, task_input: str, model_name: str, error: str) -> dict[str, Any]:
+    """Return a structured log marking the run as failed without raising."""
+    return {
+        "task_id": "load_failed",
+        "task_input_size_chars": len(task_input),
+        "agent_metadata": {"model_used": model_name},
+        "execution_log": {
+            "total_latency_seconds": 0.0,
+            "status": "error",
+            "error": error,
+            "agent_path": str(agent_path),
+            "steps": [
+                {
+                    "step_id": 1,
+                    "type": "load",
+                    "latency_seconds": 0.0,
+                    "tokens": {"system": 0, "user": 0, "assistant": 0, "tool": 0},
+                    "tools_used": [],
+                }
+            ],
+        },
+    }
+
+
 def run_sandbox_from_path(
     agent_path: Path,
     task_input: str,
@@ -120,6 +144,24 @@ def run_sandbox_from_path(
     results_dir: Optional[Path] = None,
     function_name: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Convenience wrapper that loads the agent from ``agent_path`` first."""
-    fn = _load_callable_from_path(Path(agent_path).resolve(), function_name)
+    """Convenience wrapper that loads the agent from ``agent_path`` first.
+
+    If the agent cannot be imported (missing deps, syntax error, etc.) the
+    failure is recorded in the log instead of crashing the caller — Part 2
+    can then report it as a wastefulness "error" without aborting the rest
+    of the pipeline.
+    """
+    agent_path = Path(agent_path).resolve()
+    try:
+        fn = _load_callable_from_path(agent_path, function_name)
+    except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError) as exc:
+        print(f"[Runner] Could not load agent at {agent_path}: {exc}")
+        log = _failed_log(agent_path, task_input, model_name, str(exc))
+        if results_dir is not None:
+            results_dir = Path(results_dir)
+            results_dir.mkdir(parents=True, exist_ok=True)
+            (results_dir / "execution_log.json").write_text(
+                json.dumps(log, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        return log
     return run_sandbox(fn, task_input, model_name=model_name, results_dir=results_dir)
