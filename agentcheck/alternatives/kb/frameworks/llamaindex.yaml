@@ -1,0 +1,55 @@
+id: llamaindex
+name: LlamaIndex
+type: framework
+version_snapshot: "0.12"
+snapshot_date: "2026-05"
+pricing_model: "anthropic/claude-sonnet-4.5"
+
+metrics:
+  reliability_score: 0.79
+  cost_per_task_usd: 0.038
+  loc_estimate: 120
+  cyclomatic_complexity: 16
+  cold_start_latency_ms: 600
+
+detection_signatures:
+  imports:
+    - llama_index
+    - llama_index.core
+    - llama_index.agent
+  class_names:
+    - VectorStoreIndex
+    - QueryEngine
+    - ReActAgent
+
+strengths:
+  - Best-in-class RAG primitives
+  - Data connectors ecosystem
+  - Optimized retrieval pipelines
+
+weaknesses:
+  - Heavy dependency footprint
+  - Primarily RAG-focused; poor fit for tool-heavy agents
+
+best_fit_patterns:
+  - rag_pipeline
+  - document_qa
+
+poor_fit_patterns:
+  - single_tool_call
+  - simple_extraction
+  - deterministic_transform
+
+maintenance:
+  last_release_days_ago: 10
+  open_issues: 1100
+  health: active
+
+evidence_url: "https://github.com/run-llama/llama_index"
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

@@ -1,0 +1,56 @@
+id: pydanticai
+name: PydanticAI
+type: framework
+version_snapshot: "0.3"
+snapshot_date: "2026-05"
+pricing_model: "anthropic/claude-sonnet-4.5"
+
+metrics:
+  reliability_score: 0.81
+  cost_per_task_usd: 0.028
+  loc_estimate: 90
+  cyclomatic_complexity: 11
+  cold_start_latency_ms: 280
+
+detection_signatures:
+  imports:
+    - pydantic_ai
+    - pydantic_ai.agent
+  class_names:
+    - Agent
+    - RunContext
+
+strengths:
+  - Minimal surface area — does less, breaks less
+  - First-class type safety via Pydantic v2 throughout
+  - Structured outputs without extra parsing boilerplate
+  - Significantly lower LOC than LangChain for equivalent tasks
+  - Excellent testability (model mocking built-in)
+
+weaknesses:
+  - Smaller ecosystem — fewer pre-built integrations
+  - No built-in RAG pipeline; must wire manually
+
+best_fit_patterns:
+  - structured_extraction
+  - single_tool_call
+  - plan_and_execute
+  - react_loop
+
+poor_fit_patterns:
+  - complex_rag_pipeline     # ecosystem gap
+  - deterministic_transform  # LLM not needed at all
+
+maintenance:
+  last_release_days_ago: 7
+  open_issues: 340
+  health: active
+
+evidence_url: "https://github.com/pydantic/pydantic-ai"
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

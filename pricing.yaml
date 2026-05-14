@@ -1,0 +1,17 @@
+# pricing.yaml
+snapshot_date: 2026-05-14
+models:
+  gpt-4o:
+    input_per_1m: 2.50
+    output_per_1m: 10.00
+    cached_input_per_1m: 1.25
+  gpt-4o-mini:
+    input_per_1m: 0.15
+    output_per_1m: 0.60
+    cached_input_per_1m: 0.075
+  gpt-3.5-turbo:  # ADD THIS BLOCK
+    input_per_1m: 0.50
+    output_per_1m: 1.50
+  claude-sonnet-4-7:
+    input_per_1m: 3.00
+    output_per_1m: 15.00
