@@ -1,0 +1,57 @@
+id: raw_sdk
+name: Raw SDK (OpenAI / Anthropic)
+type: framework
+version_snapshot: "2026-05"
+snapshot_date: "2026-05"
+pricing_model: "anthropic/claude-sonnet-4.5"
+
+metrics:
+  reliability_score: 0.85          # no framework bugs; only your bugs
+  cost_per_task_usd: 0.021         # no framework overhead tokens
+  loc_estimate: 75
+  cyclomatic_complexity: 9
+  cold_start_latency_ms: 190
+
+detection_signatures:
+  imports:
+    - openai
+    - anthropic
+  class_names:
+    - OpenAI
+    - AsyncOpenAI
+    - Anthropic
+    - AsyncAnthropic
+
+strengths:
+  - Zero abstraction tax on tokens or latency
+  - Full control over every API parameter
+  - Smallest dependency surface
+
+weaknesses:
+  - No built-in retry / backoff (must implement yourself)
+  - No structured output helpers beyond provider-native tools
+  - Can grow messy at scale without discipline
+
+best_fit_patterns:
+  - single_tool_call
+  - simple_extraction
+  - structured_extraction
+
+poor_fit_patterns:
+  - complex_rag_pipeline
+  - multi_agent_debate
+  - deterministic_transform   # LLM not needed at all
+
+maintenance:
+  last_release_days_ago: 3
+  open_issues: 210
+  health: active
+
+evidence_url: "https://github.com/openai/openai-python"
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate

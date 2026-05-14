@@ -1,0 +1,52 @@
+id: delete_the_llm
+name: Delete the LLM
+type: architectural_shift
+snapshot_date: "2026-05"
+description: >
+  The most aggressive recommendation: remove the language model entirely and
+  replace with a deterministic function. Reserved for tasks where pattern
+  matching, regex, rule-based logic, or a simple lookup table produces
+  identical (or better) results at zero inference cost.
+
+trigger_patterns:
+  - simple_extraction     # email, phone, date extraction
+  - format_validation     # is this a valid UUID / ISBN / postcode?
+  - template_fill         # fill a fixed template with known fields
+  - classification_small  # ≤20 categories, known rules
+
+metrics:
+  reliability_score: 0.99   # deterministic — no hallucinations
+  cost_per_task_usd: 0.000  # zero inference cost
+  loc_estimate: 10          # typically a one-liner
+  cyclomatic_complexity: 2
+
+example_replacement:
+  description: "Extract all email addresses from text"
+  before: |
+    # LLM call costing $0.003/call
+    result = client.messages.create(
+        model="claude-sonnet-4-6",
+        messages=[{"role": "user", "content": f"Extract emails from: {text}"}]
+    )
+  after: |
+    import re
+    EMAIL_RE = re.compile(r"[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}")
+    emails = EMAIL_RE.findall(text)
+
+dominance:
+  cost_improvement_pct: 100
+  reliability_improvement_pct: 27   # deterministic beats LLM on structured extraction
+  complexity_improvement_pct: 95
+
+evidence: >
+  LLMs achieve ~72% on structured email/phone extraction benchmarks due to
+  formatting variance. Regex is 100% on well-formed input. Use LLMs only
+  when the extraction boundary is ambiguous (e.g., "extract the recipient's
+  intent from this email").
+
+data_provenance:
+  metrics.reliability_score: estimate
+  metrics.cost_per_task_usd: estimate
+  metrics.loc_estimate: estimate
+  metrics.cyclomatic_complexity: estimate
+  metrics.security_finding_count: estimate
