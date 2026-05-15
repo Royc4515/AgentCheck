@@ -1,13 +1,13 @@
-"""Single LLM client routed through Groq (OpenAI-compatible).
+"""Single LLM client supporting Gemini, Groq, and local Ollama.
 
-All LLM calls across AgentCheck flow through this module so we can change
-provider, key, or model in exactly one place. The key is read from the
-``GROQ_API_KEY`` env var (with ``OPENROUTER_API_KEY`` as a fallback for
-legacy setups) — never hardcoded.
+Provider priority (first key found wins):
+  1. GEMINI_API_KEY  → Gemini via OpenAI-compatible endpoint
+  2. GROQ_API_KEY    → Groq
+  3. OPENROUTER_API_KEY → Groq-compatible (legacy)
+  4. LOCAL_LLM_URL   → local Ollama / Podman fallback
 
-Fallback: if Groq is unavailable or rate-limited, the client automatically
-retries against a local Podman/Ollama inference server when ``LOCAL_LLM_URL``
-is set in the environment.
+All LLM calls across AgentCheck flow through this module so you change
+provider in exactly one place — just set the right env var.
 """
 
 from __future__ import annotations
@@ -20,7 +20,11 @@ from typing import Any, Optional
 import requests
 
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+_GROQ_MODEL = "llama-3.3-70b-versatile"
+
+_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+_GEMINI_MODEL = "gemini-2.0-flash"
+
 _DEFAULT_TIMEOUT = 30.0
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds between retries on 429
 
@@ -32,30 +36,43 @@ _LOCAL_LLM_URL = os.environ.get("LOCAL_LLM_URL", "")
 _LOCAL_LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "llama3.2")
 
 
+def _DEFAULT_MODEL() -> str:
+    return _GEMINI_MODEL if os.environ.get("GEMINI_API_KEY") else _GROQ_MODEL
+
+
 class OpenRouterError(RuntimeError):
     """Raised when the LLM call cannot be completed."""
 
 
 class OpenRouterClient:
-    """Minimal chat-completions client for Groq with local Podman fallback."""
+    """Chat-completions client supporting Gemini, Groq, and local Ollama."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = _DEFAULT_MODEL,
+        model: Optional[str] = None,
         timeout: float = _DEFAULT_TIMEOUT,
         referer: str = "https://github.com/royc4515/agentcheck",
         title: str = "AgentCheck",
     ) -> None:
-        self._api_key = (
-            api_key
-            or os.environ.get("GROQ_API_KEY", "")
-            or os.environ.get("OPENROUTER_API_KEY", "")
-        )
-        self._model = model
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
+        groq_key = os.environ.get("GROQ_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
+
+        if api_key:
+            # Explicit key passed — caller decides provider via url/model
+            self._api_key = api_key
+            self._primary_url = _GROQ_URL
+            self._model = model or _GROQ_MODEL
+        elif gemini_key:
+            self._api_key = gemini_key
+            self._primary_url = _GEMINI_URL
+            self._model = model or _GEMINI_MODEL
+        else:
+            self._api_key = groq_key
+            self._primary_url = _GROQ_URL
+            self._model = model or _GROQ_MODEL
+
         self._timeout = timeout
-        self._referer = referer
-        self._title = title
         self._local_url = os.environ.get("LOCAL_LLM_URL", _LOCAL_LLM_URL)
         self._local_model = os.environ.get("LOCAL_LLM_MODEL", _LOCAL_LLM_MODEL)
 
@@ -86,7 +103,8 @@ class OpenRouterClient:
         """
         if not self._api_key and not self._local_url:
             raise OpenRouterError(
-                "No LLM provider configured. Set GROQ_API_KEY or LOCAL_LLM_URL."
+                "No LLM provider configured. "
+                "Set GEMINI_API_KEY, GROQ_API_KEY, or LOCAL_LLM_URL."
             )
 
         payload: dict[str, Any] = {
@@ -98,16 +116,17 @@ class OpenRouterClient:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        groq_error: Optional[Exception] = None
+        primary_error: Optional[Exception] = None
+        provider_name = "Gemini" if self._primary_url == _GEMINI_URL else "Groq"
 
-        # --- 1. Try Groq ---
+        # --- 1. Try primary provider (Gemini or Groq) ---
         if self._api_key:
             try:
-                return self._call_groq(payload)
+                return self._call_primary(payload)
             except OpenRouterError as exc:
-                groq_error = exc
+                primary_error = exc
                 if self._local_url:
-                    print(f"   [Groq] Failed ({exc}). Falling back to local LLM...")
+                    print(f"   [{provider_name}] Failed ({exc}). Falling back to local LLM...")
                 else:
                     raise
 
@@ -119,21 +138,25 @@ class OpenRouterClient:
             try:
                 return self._call_local(local_payload)
             except OpenRouterError as local_exc:
-                if groq_error:
+                if primary_error:
                     raise OpenRouterError(
-                        f"Both Groq and local LLM failed. "
-                        f"Groq: {groq_error}. Local: {local_exc}"
+                        f"Both {provider_name} and local LLM failed. "
+                        f"{provider_name}: {primary_error}. Local: {local_exc}"
                     ) from local_exc
                 raise
 
-        raise OpenRouterError(str(groq_error))
+        raise OpenRouterError(str(primary_error))
 
-    def _call_groq(self, payload: dict[str, Any]) -> str:
-        """Call Groq. If a local fallback is configured, fail fast on 429 so
-        the caller can immediately switch to local instead of waiting."""
+    def _call_primary(self, payload: dict[str, Any]) -> str:
+        """Call the primary provider (Gemini or Groq).
+
+        On 429, fails fast when a local fallback is available so the caller
+        can switch immediately. Otherwise retries with back-off.
+        """
+        provider = "Gemini" if self._primary_url == _GEMINI_URL else "Groq"
         try:
             response = requests.post(
-                _GROQ_URL,
+                self._primary_url,
                 headers={
                     "Authorization": f"Bearer {self._api_key}",
                     "Content-Type": "application/json",
@@ -143,14 +166,13 @@ class OpenRouterClient:
             )
             if response.status_code == 429:
                 if self._local_url:
-                    raise OpenRouterError("Groq rate limited (429)")
-                # No local fallback — wait and retry
+                    raise OpenRouterError(f"{provider} rate limited (429)")
                 for delay in _RETRY_DELAYS:
                     wait = float(response.headers.get("retry-after", delay))
-                    print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
+                    print(f"   [{provider}] Rate limited, retrying in {wait:.0f}s...")
                     time.sleep(wait)
                     response = requests.post(
-                        _GROQ_URL,
+                        self._primary_url,
                         headers={
                             "Authorization": f"Bearer {self._api_key}",
                             "Content-Type": "application/json",
@@ -161,14 +183,14 @@ class OpenRouterClient:
                     if response.status_code != 429:
                         break
                 else:
-                    raise OpenRouterError("Groq rate limit — retries exhausted (429)")
+                    raise OpenRouterError(f"{provider} rate limit — retries exhausted (429)")
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
         except OpenRouterError:
             raise
         except Exception as exc:
-            raise OpenRouterError(f"Groq call failed: {exc}") from exc
+            raise OpenRouterError(f"{provider} call failed: {exc}") from exc
 
     def _call_local(self, payload: dict[str, Any]) -> str:
         """Call the local Podman/Ollama inference server (no auth)."""
