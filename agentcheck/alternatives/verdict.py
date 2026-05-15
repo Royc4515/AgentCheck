@@ -20,9 +20,26 @@ import requests
 
 from .models import FullComparisonReport
 
-_DEFAULT_URL = "https://api.groq.com/openai/v1/chat/completions"
-_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+_GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+_GROQ_MODEL = "llama-3.3-70b-versatile"
+
+_GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+_GEMINI_MODEL = "gemini-2.0-flash"
+
 _DEFAULT_TIMEOUT = 20.0
+
+
+def _resolve_provider() -> tuple[str, str, str]:
+    """Return (api_key, url, model) using the first available provider.
+
+    Priority: GEMINI_API_KEY → GROQ_API_KEY → OPENROUTER_API_KEY (Groq-compat).
+    """
+    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    if gemini_key:
+        return gemini_key, _GEMINI_URL, _GEMINI_MODEL
+
+    groq_key = os.environ.get("GROQ_API_KEY", "") or os.environ.get("OPENROUTER_API_KEY", "")
+    return groq_key, _GROQ_URL, _GROQ_MODEL
 
 _SYSTEM_PROMPT = textwrap.dedent("""\
     You are AgentCheck — a brilliantly cocky AI auditing tool with the energy
@@ -95,17 +112,19 @@ class VerdictGenerator:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = _DEFAULT_MODEL,
-        url: str = _DEFAULT_URL,
+        model: Optional[str] = None,
+        url: Optional[str] = None,
         timeout: float = _DEFAULT_TIMEOUT,
     ) -> None:
         if api_key is None:
-            api_key = os.environ.get("GROQ_API_KEY", "") or os.environ.get(
-                "OPENROUTER_API_KEY", ""
-            )
-        self._api_key = api_key
-        self._model = model
-        self._url = url
+            auto_key, auto_url, auto_model = _resolve_provider()
+            self._api_key = auto_key
+            self._url = url or auto_url
+            self._model = model or auto_model
+        else:
+            self._api_key = api_key
+            self._url = url or _GROQ_URL
+            self._model = model or _GROQ_MODEL
         self._timeout = timeout
 
     def generate(self, report: FullComparisonReport) -> str:
