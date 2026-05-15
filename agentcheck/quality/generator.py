@@ -50,15 +50,11 @@ class DynamicTestGenerator:
         }}
         """
         response_text = self.llm_client.generate(prompt)
-        if not response_text:
-            return {"tests": [], "custom_metrics": []}
         try:
             parsed = json.loads(response_text)
-            # Accept both "custom_metrics" (current) and "metrics" (legacy) key names
-            metrics = parsed.get("custom_metrics") or parsed.get("metrics") or []
             return {
                 "tests": parsed.get("tests") or [],
-                "custom_metrics": metrics,
+                "custom_metrics": parsed.get("custom_metrics") or [],
             }
         except Exception as e:
             print(f"❌ Error parsing test suite: {e}")
