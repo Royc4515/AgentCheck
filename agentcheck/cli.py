@@ -15,6 +15,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()  # loads .env from the project root (or any parent directory)
+
 from .orchestrator import run_pipeline
 
 _VALID_PARTS = {"quality", "efficiency", "security", "alternatives"}
