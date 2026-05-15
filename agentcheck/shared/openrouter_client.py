@@ -165,7 +165,9 @@ class OpenRouterClient:
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
-        except (requests.RequestException, KeyError, ValueError) as exc:
+        except OpenRouterError:
+            raise
+        except Exception as exc:
             raise OpenRouterError(f"Groq call failed: {exc}") from exc
 
     def _call_local(self, payload: dict[str, Any]) -> str:
@@ -180,7 +182,7 @@ class OpenRouterClient:
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
-        except (requests.RequestException, KeyError, ValueError) as exc:
+        except Exception as exc:
             raise OpenRouterError(f"Local LLM call failed: {exc}") from exc
 
     def chat_json(

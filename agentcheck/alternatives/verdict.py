@@ -2,21 +2,27 @@ from __future__ import annotations
 
 """Cocky AI-generated verdict for check #4.
 
-Calls Groq to generate a short, personality-driven roast of the audited
+Calls an OpenAI-compatible chat-completions endpoint (Groq / OpenRouter /
+local Ollama) to generate a short, personality-driven roast of the audited
 agent based on the FullComparisonReport.
 
-API key read from $GROQ_API_KEY (OPENROUTER_API_KEY as legacy fallback).
-If no key is set, or the request fails for any reason, the function
-returns an empty string — the rest of the report renders normally.
+API key precedence: explicit ``api_key`` arg → ``$GROQ_API_KEY`` →
+``$OPENROUTER_API_KEY``. If no key is set, or the request fails for any
+reason, the function returns an empty string — the rest of the report
+renders normally.
 """
 
+import os
 import textwrap
 from typing import Optional
 
-from agentcheck.shared import OpenRouterClient
-from agentcheck.shared.openrouter_client import OpenRouterError
+import requests
 
 from .models import FullComparisonReport
+
+_DEFAULT_URL = "https://api.groq.com/openai/v1/chat/completions"
+_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+_DEFAULT_TIMEOUT = 20.0
 
 _SYSTEM_PROMPT = textwrap.dedent("""\
     You are AgentCheck — a brilliantly cocky AI auditing tool with the energy
@@ -84,23 +90,48 @@ def _build_prompt(report: FullComparisonReport) -> str:
 
 
 class VerdictGenerator:
-    """Generates the cocky AI verdict via Groq."""
+    """Generates the cocky AI verdict via an OpenAI-compatible endpoint."""
 
-    def __init__(self, client: Optional[OpenRouterClient] = None) -> None:
-        self._client = client or OpenRouterClient()
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: str = _DEFAULT_MODEL,
+        url: str = _DEFAULT_URL,
+        timeout: float = _DEFAULT_TIMEOUT,
+    ) -> None:
+        if api_key is None:
+            api_key = os.environ.get("GROQ_API_KEY", "") or os.environ.get(
+                "OPENROUTER_API_KEY", ""
+            )
+        self._api_key = api_key
+        self._model = model
+        self._url = url
+        self._timeout = timeout
 
     def generate(self, report: FullComparisonReport) -> str:
         """Return the roast text, or '' if unavailable."""
-        if not self._client.has_key:
+        if not self._api_key:
             return ""
+
+        payload = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": _build_prompt(report)},
+            ],
+            "temperature": 0.9,
+            "max_tokens": 250,
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
         try:
-            return self._client.chat(
-                [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": _build_prompt(report)},
-                ],
-                max_tokens=250,
-                temperature=0.9,
+            response = requests.post(
+                self._url, headers=headers, json=payload, timeout=self._timeout
             )
-        except OpenRouterError:  # never crash the report over a roast
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception:  # noqa: BLE001 — never crash the report over a roast
             return ""
