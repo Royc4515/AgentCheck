@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Optional
 
 import requests
@@ -17,6 +18,7 @@ import requests
 _GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _DEFAULT_TIMEOUT = 30.0
+_RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds between retries on 429
 
 
 class OpenRouterError(RuntimeError):
@@ -63,8 +65,8 @@ class OpenRouterClient:
     ) -> str:
         """Send a chat-completions request and return the assistant text.
 
-        Raises OpenRouterError on any failure (no key, network, bad payload).
-        Callers that prefer a soft-fail pattern should catch it.
+        Retries up to 3 times with exponential backoff on 429 rate-limit
+        responses. Raises OpenRouterError on any unrecoverable failure.
         """
         if not self._api_key:
             raise OpenRouterError(
@@ -80,21 +82,40 @@ class OpenRouterClient:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
-        try:
-            response = requests.post(
-                _GROQ_URL,
-                headers={
-                    "Authorization": f"Bearer {self._api_key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=self._timeout,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"].strip()
-        except (requests.RequestException, KeyError, ValueError) as exc:
-            raise OpenRouterError(f"Groq call failed: {exc}") from exc
+        last_exc: Exception = RuntimeError("unreachable")
+        for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+            try:
+                response = requests.post(
+                    _GROQ_URL,
+                    headers={
+                        "Authorization": f"Bearer {self._api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=self._timeout,
+                )
+                if response.status_code == 429 and delay is not None:
+                    wait = float(response.headers.get("retry-after", delay))
+                    print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
+                    time.sleep(wait)
+                    continue
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"].strip()
+            except (requests.RequestException, KeyError, ValueError) as exc:
+                last_exc = exc
+                if (
+                    isinstance(exc, requests.HTTPError)
+                    and exc.response is not None
+                    and exc.response.status_code == 429
+                    and delay is not None
+                ):
+                    print(f"   [Groq] Rate limited, retrying in {delay:.0f}s...")
+                    time.sleep(delay)
+                    continue
+                raise OpenRouterError(f"Groq call failed: {exc}") from exc
+
+        raise OpenRouterError(f"Groq call failed after retries: {last_exc}") from last_exc
 
     def chat_json(
         self,
