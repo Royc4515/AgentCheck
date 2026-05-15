@@ -32,9 +32,10 @@ _DEFAULT_TIMEOUT = 20.0
 def _resolve_provider() -> tuple[str, str, str]:
     """Return (api_key, url, model) using the first available provider.
 
-    Priority: GEMINI_API_KEY → GROQ_API_KEY → OPENROUTER_API_KEY (Groq-compat).
+    Priority: GEMINI_API_KEY_4 → GROQ_API_KEY → OPENROUTER_API_KEY (Groq-compat).
+    GEMINI_API_KEY_4 is intentionally separate from GEMINI_API_KEY (used by parts 1-3).
     """
-    gemini_key = os.environ.get("GEMINI_API_KEY", "")
+    gemini_key = os.environ.get("GEMINI_API_KEY_4", "")
     if gemini_key:
         return gemini_key, _GEMINI_URL, _GEMINI_MODEL
 
