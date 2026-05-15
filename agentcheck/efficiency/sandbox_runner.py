@@ -61,7 +61,7 @@ def _normalise_response(raw: Any, task_input: str) -> dict[str, Any]:
 def run_sandbox(
     agent_func: Callable[..., Any],
     task_input: str,
-    model_name: str = "gpt-4o-mini",
+    model_name: str = "llama-3.3-70b-versatile",
     results_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     """Execute ``agent_func`` once, capture metrics, write log to results_dir."""
@@ -140,7 +140,7 @@ def _failed_log(agent_path: Path, task_input: str, model_name: str, error: str) 
 def run_sandbox_from_path(
     agent_path: Path,
     task_input: str,
-    model_name: str = "gpt-4o-mini",
+    model_name: str = "llama-3.3-70b-versatile",
     results_dir: Optional[Path] = None,
     function_name: Optional[str] = None,
 ) -> dict[str, Any]:

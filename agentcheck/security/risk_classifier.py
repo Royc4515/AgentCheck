@@ -31,7 +31,7 @@ def classify_findings(
     if not client.has_key:
         for f in findings:
             f.classification = "unclassified"
-            f.rationale = "OPENROUTER_API_KEY not set; skipped LLM classification."
+            f.rationale = "GROQ_API_KEY not set; skipped LLM classification."
         return findings
 
     for f in findings:

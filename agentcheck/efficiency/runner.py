@@ -36,7 +36,7 @@ def run_efficiency(
     agent_path: Path,
     results_dir: Path,
     task_prompt: str = "Summarise this task in one sentence.",
-    model: str = "gpt-4o-mini",
+    model: str = "llama-3.3-70b-versatile",
 ) -> WastefulnessResult:
     """Run the Part 2 wastefulness check against the agent at ``agent_path``."""
     agent_path = Path(agent_path).resolve()

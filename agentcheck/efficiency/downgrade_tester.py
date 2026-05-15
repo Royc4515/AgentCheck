@@ -8,18 +8,22 @@ from agentcheck.quality.samples.dummy_agents import efficient_agent  # noqa: F40
 # 1. The Downgrade Ladder
 # ==========================================
 DOWNGRADE_LADDER = {
+    "groq": {
+        "llama-3.3-70b-versatile": "llama-3.1-8b-instant",
+        "llama-3.1-8b-instant": "gemma2-9b-it",
+    },
     "openai": {
         "gpt-4o": "gpt-4o-mini",
-        "gpt-4o-mini": "gpt-3.5-turbo"
+        "gpt-4o-mini": "gpt-3.5-turbo",
     },
     "anthropic": {
         "claude-opus": "claude-sonnet",
-        "claude-sonnet": "claude-haiku"
+        "claude-sonnet": "claude-haiku",
     },
     "google": {
         "gemini-pro": "gemini-flash",
-        "gemini-flash": "gemini-flash-lite"
-    }
+        "gemini-flash": "gemini-flash-lite",
+    },
 }
 
 # ==========================================

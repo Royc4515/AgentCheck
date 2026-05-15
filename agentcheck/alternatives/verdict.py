@@ -2,25 +2,21 @@ from __future__ import annotations
 
 """Cocky AI-generated verdict for check #4.
 
-Calls OpenRouter (OpenAI-compatible) to generate a short, personality-driven
-roast of the audited agent based on the FullComparisonReport.
+Calls Groq to generate a short, personality-driven roast of the audited
+agent based on the FullComparisonReport.
 
-API key read from $OPENROUTER_API_KEY.  If the env var is not set, or the
-request fails for any reason, the function returns an empty string — the
-rest of the report renders normally, this section is simply skipped.
+API key read from $GROQ_API_KEY (OPENROUTER_API_KEY as legacy fallback).
+If no key is set, or the request fails for any reason, the function
+returns an empty string — the rest of the report renders normally.
 """
 
-import os
 import textwrap
 from typing import Optional
 
-import requests
+from agentcheck.shared import OpenRouterClient
+from agentcheck.shared.openrouter_client import OpenRouterError
 
 from .models import FullComparisonReport
-
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_DEFAULT_MODEL = "anthropic/claude-haiku-4-5-20251001"
-_TIMEOUT = 20.0
 
 _SYSTEM_PROMPT = textwrap.dedent("""\
     You are AgentCheck — a brilliantly cocky AI auditing tool with the energy
@@ -88,47 +84,23 @@ def _build_prompt(report: FullComparisonReport) -> str:
 
 
 class VerdictGenerator:
-    """Generates the cocky AI verdict via OpenRouter."""
+    """Generates the cocky AI verdict via Groq."""
 
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: str = _DEFAULT_MODEL,
-        timeout: float = _TIMEOUT,
-    ) -> None:
-        self._api_key = api_key or os.environ.get("OPENROUTER_API_KEY", "")
-        self._model = model
-        self._timeout = timeout
+    def __init__(self, client: Optional[OpenRouterClient] = None) -> None:
+        self._client = client or OpenRouterClient()
 
     def generate(self, report: FullComparisonReport) -> str:
         """Return the roast text, or '' if unavailable."""
-        if not self._api_key:
+        if not self._client.has_key:
             return ""
         try:
-            return self._call(report)
-        except Exception:  # noqa: BLE001 — never crash the report over a roast
-            return ""
-
-    def _call(self, report: FullComparisonReport) -> str:
-        response = requests.post(
-            _OPENROUTER_URL,
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/royc4515/agentcheck",
-                "X-Title": "AgentCheck",
-            },
-            json={
-                "model": self._model,
-                "messages": [
+            return self._client.chat(
+                [
                     {"role": "system", "content": _SYSTEM_PROMPT},
                     {"role": "user", "content": _build_prompt(report)},
                 ],
-                "max_tokens": 250,
-                "temperature": 0.9,
-            },
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+                max_tokens=250,
+                temperature=0.9,
+            )
+        except OpenRouterError:  # never crash the report over a roast
+            return ""
