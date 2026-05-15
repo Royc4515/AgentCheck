@@ -117,15 +117,12 @@ class VerdictGenerator:
         url: Optional[str] = None,
         timeout: float = _DEFAULT_TIMEOUT,
     ) -> None:
-        if api_key is None:
-            auto_key, auto_url, auto_model = _resolve_provider()
-            self._api_key = auto_key
-            self._url = url or auto_url
-            self._model = model or auto_model
-        else:
-            self._api_key = api_key
-            self._url = url or _GROQ_URL
-            self._model = model or _GROQ_MODEL
+        resolved_key, resolved_url, resolved_model = _resolve_provider()
+        # Explicit api_key overrides the resolved key but keeps the resolved
+        # url/model so a Gemini key doesn't accidentally hit the Groq endpoint.
+        self._api_key = api_key if api_key is not None else resolved_key
+        self._url = url or resolved_url
+        self._model = model or resolved_model
         self._timeout = timeout
 
     def generate(self, report: FullComparisonReport) -> str:
