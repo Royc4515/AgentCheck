@@ -74,16 +74,27 @@ def _load_agent_callable(agent_path: Path) -> tuple[Callable[..., Any], str]:
     return chosen[1], chosen[0]
 
 
-def _invoke_agent(fn: Callable[..., Any], prompt: str) -> str:
+def _invoke_agent(fn: Callable[..., Any], prompt: str, api_key: str = "") -> str:
     sig = inspect.signature(fn)
     params = [
         p for p in sig.parameters.values()
         if p.kind not in (p.VAR_KEYWORD, p.VAR_POSITIONAL)
     ]
-    try:
-        result = fn(prompt) if params else fn()
-    except TypeError:
+    if not params:
+        result = fn()
+    elif len(params) == 1:
         result = fn(prompt)
+    else:
+        # Second param looks like an API key — inject it so callers like
+        # travel_planner_agent(prompt, api_key) work without modification.
+        p2 = params[1].name.lower()
+        if any(k in p2 for k in ("key", "token", "api", "secret")):
+            result = fn(prompt, api_key)
+        else:
+            try:
+                result = fn(prompt)
+            except TypeError:
+                result = fn(prompt, "")
     if isinstance(result, dict):
         for k in ("output", "content", "text", "response", "answer"):
             if k in result and isinstance(result[k], str):
@@ -120,7 +131,8 @@ class _LLMClientShim:
                 json_mode=True,
             )
         except OpenRouterError as exc:
-            return f'{{"error": "{exc}"}}'
+            print(f"   ⚠️  LLM call failed: {exc}")
+            return ""
 
 
 def run_quality(
@@ -158,7 +170,8 @@ def run_quality(
 
         suite = generator.generate_suite(purpose) if client.has_key else {}
         tests = suite.get("tests", []) or []
-        metrics = suite.get("custom_metrics", []) or []
+        # Accept both "custom_metrics" (current) and "metrics" (legacy) key names
+        metrics = suite.get("custom_metrics") or suite.get("metrics") or []
 
         if not tests:
             tests = [{"name": "smoke", "prompt": "Hello, please respond.", "type": "happy_path"}]
@@ -170,7 +183,7 @@ def run_quality(
             test_prompt = t.get("prompt", "")
             prompts[name] = test_prompt
             try:
-                outputs[name] = _invoke_agent(agent_fn, test_prompt)
+                outputs[name] = _invoke_agent(agent_fn, test_prompt, client._api_key)
             except Exception as exc:  # noqa: BLE001
                 outputs[name] = f"[ERROR] {exc}"
 

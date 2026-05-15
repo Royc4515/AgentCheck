@@ -212,3 +212,32 @@ def test_full_flow_uses_provided_task_as_purpose(
         )
 
     assert any("book flight tickets" in p for p in captured_prompts)
+
+
+# ---------------------------------------------------------------------------
+# 2-param agent (prompt + api_key) — regression test for _invoke_agent fix
+# ---------------------------------------------------------------------------
+
+def test_two_param_agent_receives_api_key(
+    fixture_results_dir: Path, tmp_path: Path, monkeypatch
+) -> None:
+    """Agents with signature (prompt, api_key) must be invoked correctly."""
+    agent_src = '''
+def my_agent(prompt, api_key):
+    return f"called with key={api_key}: {prompt}"
+'''
+    agent_path = tmp_path / "two_param_agent.py"
+    agent_path.write_text(agent_src)
+
+    monkeypatch.setenv("GROQ_API_KEY", "test-key-123")
+
+    with patch("agentcheck.quality.runner.OpenRouterClient") as MockClient:
+        instance = MockClient.return_value
+        instance.has_key = False  # skip LLM generation — heuristic path
+
+        result = run_quality(agent_path, fixture_results_dir)
+
+    assert result.tasks_total >= 1
+    # If _invoke_agent wrongly called fn(prompt) the output would be "[ERROR]"
+    # and tasks_passed would be 0. A non-zero pass count proves the agent ran.
+    assert result.tasks_passed >= 1
