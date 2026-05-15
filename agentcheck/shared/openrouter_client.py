@@ -129,44 +129,44 @@ class OpenRouterClient:
         raise OpenRouterError(str(groq_error))
 
     def _call_groq(self, payload: dict[str, Any]) -> str:
-        """Call Groq with retry-on-429 logic."""
-        last_exc: Exception = RuntimeError("unreachable")
-        for delay in (*_RETRY_DELAYS, None):
-            try:
-                response = requests.post(
-                    _GROQ_URL,
-                    headers={
-                        "Authorization": f"Bearer {self._api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json=payload,
-                    timeout=self._timeout,
-                )
-                if response.status_code == 429:
-                    if delay is not None:
-                        wait = float(response.headers.get("retry-after", delay))
-                        print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
-                        time.sleep(wait)
-                        continue
-                    # exhausted retries
-                    raise OpenRouterError("Groq rate limit — retries exhausted (429)")
-                response.raise_for_status()
-                data = response.json()
-                return data["choices"][0]["message"]["content"].strip()
-            except (requests.RequestException, KeyError, ValueError) as exc:
-                last_exc = exc
-                if (
-                    isinstance(exc, requests.HTTPError)
-                    and exc.response is not None
-                    and exc.response.status_code == 429
-                    and delay is not None
-                ):
-                    wait = float(exc.response.headers.get("retry-after", delay))
+        """Call Groq. If a local fallback is configured, fail fast on 429 so
+        the caller can immediately switch to local instead of waiting."""
+        try:
+            response = requests.post(
+                _GROQ_URL,
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=self._timeout,
+            )
+            if response.status_code == 429:
+                if self._local_url:
+                    raise OpenRouterError("Groq rate limited (429)")
+                # No local fallback — wait and retry
+                for delay in _RETRY_DELAYS:
+                    wait = float(response.headers.get("retry-after", delay))
                     print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
                     time.sleep(wait)
-                    continue
-                raise OpenRouterError(f"Groq call failed: {exc}") from exc
-        raise OpenRouterError(f"Groq call failed after retries: {last_exc}") from last_exc
+                    response = requests.post(
+                        _GROQ_URL,
+                        headers={
+                            "Authorization": f"Bearer {self._api_key}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                        timeout=self._timeout,
+                    )
+                    if response.status_code != 429:
+                        break
+                else:
+                    raise OpenRouterError("Groq rate limit — retries exhausted (429)")
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            raise OpenRouterError(f"Groq call failed: {exc}") from exc
 
     def _call_local(self, payload: dict[str, Any]) -> str:
         """Call the local Podman/Ollama inference server (no auth)."""
