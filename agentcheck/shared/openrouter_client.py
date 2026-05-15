@@ -4,6 +4,10 @@ All LLM calls across AgentCheck flow through this module so we can change
 provider, key, or model in exactly one place. The key is read from the
 ``GROQ_API_KEY`` env var (with ``OPENROUTER_API_KEY`` as a fallback for
 legacy setups) — never hardcoded.
+
+Fallback: if Groq is unavailable or rate-limited, the client automatically
+retries against a local Podman/Ollama inference server when ``LOCAL_LLM_URL``
+is set in the environment.
 """
 
 from __future__ import annotations
@@ -20,13 +24,20 @@ _DEFAULT_MODEL = "llama-3.3-70b-versatile"
 _DEFAULT_TIMEOUT = 30.0
 _RETRY_DELAYS = (5.0, 15.0, 30.0)  # seconds between retries on 429
 
+# Local Podman/Ollama fallback — set these env vars to enable
+# LOCAL_LLM_URL   e.g. http://localhost:11434/v1/chat/completions  (Ollama)
+#                      http://localhost:8080/v1/chat/completions    (AI Lab)
+# LOCAL_LLM_MODEL e.g. llama3.2  (must match a model loaded in Podman)
+_LOCAL_LLM_URL = os.environ.get("LOCAL_LLM_URL", "")
+_LOCAL_LLM_MODEL = os.environ.get("LOCAL_LLM_MODEL", "llama3.2")
+
 
 class OpenRouterError(RuntimeError):
     """Raised when the LLM call cannot be completed."""
 
 
 class OpenRouterClient:
-    """Minimal chat-completions client for Groq (OpenAI-compatible API)."""
+    """Minimal chat-completions client for Groq with local Podman fallback."""
 
     def __init__(
         self,
@@ -45,10 +56,12 @@ class OpenRouterClient:
         self._timeout = timeout
         self._referer = referer
         self._title = title
+        self._local_url = os.environ.get("LOCAL_LLM_URL", _LOCAL_LLM_URL)
+        self._local_model = os.environ.get("LOCAL_LLM_MODEL", _LOCAL_LLM_MODEL)
 
     @property
     def has_key(self) -> bool:
-        return bool(self._api_key)
+        return bool(self._api_key) or bool(self._local_url)
 
     @property
     def model(self) -> str:
@@ -65,12 +78,15 @@ class OpenRouterClient:
     ) -> str:
         """Send a chat-completions request and return the assistant text.
 
-        Retries up to 3 times with exponential backoff on 429 rate-limit
-        responses. Raises OpenRouterError on any unrecoverable failure.
+        Try order:
+          1. Groq (with retry on 429 using Retry-After header)
+          2. Local Podman/Ollama fallback (if LOCAL_LLM_URL is set)
+
+        Raises OpenRouterError if both providers fail.
         """
-        if not self._api_key:
+        if not self._api_key and not self._local_url:
             raise OpenRouterError(
-                "GROQ_API_KEY is not set. Export it before running AgentCheck."
+                "No LLM provider configured. Set GROQ_API_KEY or LOCAL_LLM_URL."
             )
 
         payload: dict[str, Any] = {
@@ -82,8 +98,40 @@ class OpenRouterClient:
         if json_mode:
             payload["response_format"] = {"type": "json_object"}
 
+        groq_error: Optional[Exception] = None
+
+        # --- 1. Try Groq ---
+        if self._api_key:
+            try:
+                return self._call_groq(payload)
+            except OpenRouterError as exc:
+                groq_error = exc
+                if self._local_url:
+                    print(f"   [Groq] Failed ({exc}). Falling back to local LLM...")
+                else:
+                    raise
+
+        # --- 2. Try local Podman/Ollama fallback ---
+        if self._local_url:
+            local_payload = {**payload, "model": self._local_model}
+            # local models often don't support json response_format
+            local_payload.pop("response_format", None)
+            try:
+                return self._call_local(local_payload)
+            except OpenRouterError as local_exc:
+                if groq_error:
+                    raise OpenRouterError(
+                        f"Both Groq and local LLM failed. "
+                        f"Groq: {groq_error}. Local: {local_exc}"
+                    ) from local_exc
+                raise
+
+        raise OpenRouterError(str(groq_error))
+
+    def _call_groq(self, payload: dict[str, Any]) -> str:
+        """Call Groq with retry-on-429 logic."""
         last_exc: Exception = RuntimeError("unreachable")
-        for attempt, delay in enumerate((*_RETRY_DELAYS, None)):
+        for delay in (*_RETRY_DELAYS, None):
             try:
                 response = requests.post(
                     _GROQ_URL,
@@ -94,11 +142,14 @@ class OpenRouterClient:
                     json=payload,
                     timeout=self._timeout,
                 )
-                if response.status_code == 429 and delay is not None:
-                    wait = float(response.headers.get("retry-after", delay))
-                    print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
-                    time.sleep(wait)
-                    continue
+                if response.status_code == 429:
+                    if delay is not None:
+                        wait = float(response.headers.get("retry-after", delay))
+                        print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
+                        time.sleep(wait)
+                        continue
+                    # exhausted retries
+                    raise OpenRouterError("Groq rate limit — retries exhausted (429)")
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"].strip()
@@ -110,12 +161,27 @@ class OpenRouterClient:
                     and exc.response.status_code == 429
                     and delay is not None
                 ):
-                    print(f"   [Groq] Rate limited, retrying in {delay:.0f}s...")
-                    time.sleep(delay)
+                    wait = float(exc.response.headers.get("retry-after", delay))
+                    print(f"   [Groq] Rate limited, retrying in {wait:.0f}s...")
+                    time.sleep(wait)
                     continue
                 raise OpenRouterError(f"Groq call failed: {exc}") from exc
-
         raise OpenRouterError(f"Groq call failed after retries: {last_exc}") from last_exc
+
+    def _call_local(self, payload: dict[str, Any]) -> str:
+        """Call the local Podman/Ollama inference server (no auth)."""
+        try:
+            response = requests.post(
+                self._local_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except (requests.RequestException, KeyError, ValueError) as exc:
+            raise OpenRouterError(f"Local LLM call failed: {exc}") from exc
 
     def chat_json(
         self,
