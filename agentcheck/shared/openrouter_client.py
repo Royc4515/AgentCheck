@@ -36,6 +36,24 @@ class OpenRouterError(RuntimeError):
     """Raised when the LLM call cannot be completed."""
 
 
+def _normalize_local_url(url: str) -> str:
+    """Accept either a base URL or a full chat-completions URL.
+
+    Users commonly set ``LOCAL_LLM_URL`` to the base of their Ollama/LM
+    Studio/llama.cpp server (``http://localhost:PORT`` or ``.../v1``).
+    Normalize to the full ``.../v1/chat/completions`` endpoint so the
+    POST hits an actual route instead of 404.
+    """
+    if not url:
+        return ""
+    u = url.rstrip("/")
+    if u.endswith("/chat/completions"):
+        return u
+    if u.endswith("/v1"):
+        return u + "/chat/completions"
+    return u + "/v1/chat/completions"
+
+
 class OpenRouterClient:
     """Minimal chat-completions client for Groq with local Podman fallback."""
 
@@ -56,7 +74,9 @@ class OpenRouterClient:
         self._timeout = timeout
         self._referer = referer
         self._title = title
-        self._local_url = os.environ.get("LOCAL_LLM_URL", _LOCAL_LLM_URL)
+        self._local_url = _normalize_local_url(
+            os.environ.get("LOCAL_LLM_URL", _LOCAL_LLM_URL)
+        )
         self._local_model = os.environ.get("LOCAL_LLM_MODEL", _LOCAL_LLM_MODEL)
 
     @property

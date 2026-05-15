@@ -7,7 +7,35 @@ import pytest
 from agentcheck.shared.openrouter_client import (
     OpenRouterClient,
     OpenRouterError,
+    _normalize_local_url,
 )
+
+
+class TestNormalizeLocalUrl:
+    def test_empty_stays_empty(self):
+        assert _normalize_local_url("") == ""
+
+    def test_base_url_gets_full_path(self):
+        assert (
+            _normalize_local_url("http://localhost:11434")
+            == "http://localhost:11434/v1/chat/completions"
+        )
+
+    def test_v1_suffix_gets_chat_completions(self):
+        assert (
+            _normalize_local_url("http://localhost:60923/v1")
+            == "http://localhost:60923/v1/chat/completions"
+        )
+
+    def test_already_full_url_passthrough(self):
+        full = "http://localhost:11434/v1/chat/completions"
+        assert _normalize_local_url(full) == full
+
+    def test_trailing_slash_is_stripped(self):
+        assert (
+            _normalize_local_url("http://localhost:11434/")
+            == "http://localhost:11434/v1/chat/completions"
+        )
 
 
 def _ok_response(text: str = "hi") -> MagicMock:
@@ -104,6 +132,17 @@ class TestLocalOnly:
             OpenRouterClient().chat([{"role": "user", "content": "ping"}])
         headers = mock_post.call_args.kwargs["headers"]
         assert "Authorization" not in headers
+
+    def test_local_url_base_form_is_normalized(self, monkeypatch):
+        """User-provided LOCAL_LLM_URL=http://host:port/v1 should still hit /chat/completions."""
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        monkeypatch.setenv("LOCAL_LLM_URL", "http://localhost:60923/v1")
+        with patch("agentcheck.shared.openrouter_client.requests.post") as mock_post:
+            mock_post.return_value = _ok_response("ok")
+            OpenRouterClient().chat([{"role": "user", "content": "ping"}])
+        called_url = mock_post.call_args.args[0]
+        assert called_url == "http://localhost:60923/v1/chat/completions"
 
     def test_local_failure_raises_openrouter_error(self, monkeypatch):
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
